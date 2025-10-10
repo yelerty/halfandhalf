@@ -22,11 +22,12 @@ export default function RootLayout() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(tabs)';
+    const inLoginScreen = segments[0] === 'login';
 
     if (!user && inAuthGroup) {
       // 로그인 안되어있으면 로그인 화면으로
       router.replace('/login');
-    } else if (user && !inAuthGroup) {
+    } else if (user && inLoginScreen) {
       // 로그인 되어있으면 메인으로
       router.replace('/(tabs)');
     }
