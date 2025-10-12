@@ -1,13 +1,15 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
-import * as Location from 'expo-location';
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, auth } from '../../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function CreatePostScreen() {
+export default function EditPostScreen() {
   const router = useRouter();
+  const { id, repost, archivedId } = useLocalSearchParams();
+  const isRepostMode = repost === 'true';
   const [store, setStore] = useState('');
   const [item, setItem] = useState('');
   const [date, setDate] = useState(new Date());
@@ -17,23 +19,41 @@ export default function CreatePostScreen() {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('권한 필요', '위치 권한이 필요합니다.');
-        return;
-      }
+    loadPost();
+  }, [id]);
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
-    })();
-  }, []);
+  const parseDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const parseTime = (timeStr: string) => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  };
+
+  const loadPost = async () => {
+    try {
+      const postDoc = await getDoc(doc(db, 'posts', id as string));
+      if (postDoc.exists()) {
+        const data = postDoc.data();
+        setStore(data.store);
+        setItem(data.item);
+        if (data.date) {
+          setDate(parseDate(data.date));
+        }
+        setStartTime(parseTime(data.startTime));
+        setEndTime(parseTime(data.endTime));
+      }
+    } catch (error) {
+      Alert.alert('오류', '게시글을 불러올 수 없습니다.');
+      router.back();
+    }
+  };
 
   const formatDate = (date: Date) => {
     const year = date.getFullYear();
@@ -48,40 +68,67 @@ export default function CreatePostScreen() {
     return `${hours}:${minutes}`;
   };
 
-  const handleSubmit = async () => {
+  const handleUpdate = async () => {
     if (!store || !item) {
       Alert.alert('오류', '모든 필드를 입력해주세요');
       return;
     }
 
-    if (!location) {
-      Alert.alert('오류', '위치 정보를 가져오는 중입니다. 잠시 후 다시 시도해주세요.');
-      return;
-    }
-
     try {
       setLoading(true);
-      await addDoc(collection(db, 'posts'), {
+      await updateDoc(doc(db, 'posts', id as string), {
         store,
         item,
         date: formatDate(date),
         startTime: formatTime(startTime),
         endTime: formatTime(endTime),
-        userId: auth.currentUser?.uid,
-        userEmail: auth.currentUser?.email,
-        location: {
-          latitude: location.latitude,
-          longitude: location.longitude,
-        },
-        createdAt: serverTimestamp(),
       });
-      Alert.alert('성공', '게시글이 등록되었습니다!');
+
+      // 재등록 모드인 경우 보관함에서 삭제
+      if (isRepostMode && archivedId) {
+        try {
+          const key = `@expired_posts_${auth.currentUser?.uid}`;
+          const existing = await AsyncStorage.getItem(key);
+          if (existing) {
+            const archived = JSON.parse(existing);
+            const filtered = archived.filter((p: any) => p.id !== archivedId);
+            await AsyncStorage.setItem(key, JSON.stringify(filtered));
+          }
+        } catch (error) {
+          console.error('보관함 삭제 오류:', error);
+        }
+      }
+
+      Alert.alert('성공', isRepostMode ? '게시글이 재등록되었습니다!' : '게시글이 수정되었습니다!');
       router.back();
     } catch (error: any) {
       Alert.alert('오류', error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      '게시글 삭제',
+      '정말 삭제하시겠습니까? (관련 채팅도 모두 삭제됩니다)',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'posts', id as string));
+              Alert.alert('성공', '게시글이 삭제되었습니다.');
+              router.back();
+            } catch (error: any) {
+              Alert.alert('오류', error.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -171,13 +218,22 @@ export default function CreatePostScreen() {
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSubmit}
+          onPress={handleUpdate}
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? '등록 중...' : '등록하기'}
+            {loading
+              ? (isRepostMode ? '재등록 중...' : '수정 중...')
+              : (isRepostMode ? '수정해서 재등록' : '수정하기')
+            }
           </Text>
         </TouchableOpacity>
+
+        {!isRepostMode && (
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+            <Text style={styles.deleteButtonText}>게시글 삭제</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );
@@ -219,6 +275,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ccc',
   },
   buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  deleteButton: {
+    backgroundColor: '#ff5252',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  deleteButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',

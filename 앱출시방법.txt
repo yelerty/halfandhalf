@@ -1,0 +1,54 @@
+> 앱스토어와 구글 플레이에 출시하기 위해 해야되는 작업은 무엇이 있을까? 
+
+⏺ App Store & Google Play 출시 준비 작업
+
+  1. 개발자 계정
+
+  - Apple Developer Program: $99/년
+  - Google Play Console: $25 (1회)
+
+  2. 앱 빌드
+
+  # iOS
+  eas build --platform ios
+
+  # Android
+  eas build --platform android
+
+  3. 앱 정보 준비
+
+  - 앱 이름, 설명, 키워드
+  - 스크린샷 (여러 기기 사이즈)
+  - 앱 아이콘 (1024x1024)
+  - 개인정보 처리방침 URL
+  - 이용약관
+
+  4. Firebase 설정
+
+  - iOS: GoogleService-Info.plist 추가
+  - Android: google-services.json 추가
+
+  5. 앱 설정
+
+  - app.json에서 버전, 번들 ID 설정
+  - 권한 설정 (위치, 알림 등)
+  - 앱 서명 인증서
+
+  6. 테스트
+
+  - TestFlight (iOS)
+  - 내부 테스트 (Android)
+
+  7. 심사 제출
+
+  - App Store Connect (iOS)
+  - Google Play Console (Android)
+
+  8. 추가 고려사항
+
+  - Firebase 보안 규칙 강화
+  - API 키 보안 처리
+  - 에러 트래킹 (Sentry 등)
+  - 분석 도구 (Analytics)
+
+  전체 과정은 약 1-2주 소요됩니다.

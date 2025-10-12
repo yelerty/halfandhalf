@@ -38,6 +38,7 @@ export default function RootLayout() {
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="create-post" options={{ title: '공동구매 등록', presentation: 'modal' }} />
+      <Stack.Screen name="edit-post/[id]" options={{ title: '게시글 수정' }} />
       <Stack.Screen name="chat/[id]" options={{ title: '채팅' }} />
     </Stack>
   );

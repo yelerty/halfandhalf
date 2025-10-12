@@ -4,15 +4,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
+import * as Location from 'expo-location';
+import { calculateDistance } from '../../utils/location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Post {
   id: string;
   store: string;
   item: string;
+  date?: string;
   startTime: string;
   endTime: string;
   userEmail: string;
   userId: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
   createdAt: any;
 }
 
@@ -23,6 +31,44 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [storeFilter, setStoreFilter] = useState('');
   const [blacklist, setBlacklist] = useState<string[]>([]);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // 만료된 게시글을 로컬에 저장
+  const saveExpiredPost = async (post: Post) => {
+    try {
+      const key = `@expired_posts_${auth.currentUser?.uid}`;
+      const existing = await AsyncStorage.getItem(key);
+      const expiredPosts = existing ? JSON.parse(existing) : [];
+
+      // 이미 저장된 게시글인지 확인
+      const alreadyExists = expiredPosts.some((p: Post) => p.id === post.id);
+      if (!alreadyExists) {
+        expiredPosts.push({
+          ...post,
+          expiredAt: new Date().toISOString(),
+        });
+        await AsyncStorage.setItem(key, JSON.stringify(expiredPosts));
+      }
+    } catch (error) {
+      console.error('만료된 게시글 저장 오류:', error);
+    }
+  };
+
+  // 사용자 위치 가져오기
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+    })();
+  }, []);
 
   // 블랙리스트 불러오기
   useEffect(() => {
@@ -44,7 +90,6 @@ export default function HomeScreen() {
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
       const postsData: Post[] = [];
       const deletePromises: Promise<void>[] = [];
@@ -52,8 +97,24 @@ export default function HomeScreen() {
       for (const docSnapshot of snapshot.docs) {
         const post = { id: docSnapshot.id, ...docSnapshot.data() } as Post;
 
-        // endTime이 현재 시간보다 이전이면 삭제
-        if (post.endTime < currentTime) {
+        // 날짜와 시간을 결합하여 만료 여부 확인
+        let isExpired = false;
+        if (post.date && post.endTime) {
+          // 날짜와 시간을 결합하여 Date 객체 생성
+          const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);
+          isExpired = postEndDateTime < now;
+        } else if (post.endTime) {
+          // 날짜가 없는 경우 (기존 게시글 호환성) - 오늘 날짜 기준으로 비교
+          const today = now.toISOString().split('T')[0];
+          const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
+          isExpired = postEndDateTime < now;
+        }
+
+        if (isExpired) {
+          // 내 게시글이면 로컬에 저장
+          if (post.userId === auth.currentUser?.uid) {
+            saveExpiredPost(post);
+          }
           deletePromises.push(deleteDoc(doc(db, 'posts', docSnapshot.id)));
         } else {
           postsData.push(post);
@@ -70,9 +131,28 @@ export default function HomeScreen() {
     return unsubscribe;
   }, []);
 
-  // 필터링 (매장 & 블랙리스트)
+  // 필터링 (내 게시글 제외 & 매장 & 블랙리스트 & 30km 반경)
   useEffect(() => {
     let filtered = posts;
+
+    // 내 게시글 제외
+    filtered = filtered.filter(post => post.userId !== auth.currentUser?.uid);
+
+    // 30km 반경 필터 (위치 정보가 있는 경우에만)
+    if (userLocation) {
+      filtered = filtered.filter(post => {
+        if (!post.location) return false; // 위치 정보 없는 게시글 제외
+
+        const distance = calculateDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          post.location.latitude,
+          post.location.longitude
+        );
+
+        return distance <= 30; // 30km 이내만 표시
+      });
+    }
 
     // 매장 필터
     if (storeFilter.trim()) {
@@ -85,7 +165,7 @@ export default function HomeScreen() {
     filtered = filtered.filter(post => !blacklist.includes(post.userId));
 
     setFilteredPosts(filtered);
-  }, [posts, storeFilter, blacklist]);
+  }, [posts, storeFilter, blacklist, userLocation]);
 
   const handleAddToBlacklist = async (userId: string, userEmail: string) => {
     if (!auth.currentUser) return;
@@ -141,24 +221,38 @@ export default function HomeScreen() {
           </Text>
         ) : (
           filteredPosts.map((post) => (
-            <View key={post.id} style={styles.postCard}>
+            <TouchableOpacity
+              key={post.id}
+              style={styles.postCard}
+              onPress={() => {
+                router.push(`/chat/${post.id}`);
+              }}
+            >
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{post.store}</Text>
-                {post.userId !== auth.currentUser?.uid && (
-                  <TouchableOpacity
-                    onPress={() => handleAddToBlacklist(post.userId, post.userEmail)}
-                    style={styles.blockButton}
-                  >
-                    <Ionicons name="ban" size={20} color="#ff5252" />
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleAddToBlacklist(post.userId, post.userEmail);
+                  }}
+                  style={styles.blockButton}
+                >
+                  <Ionicons name="ban" size={20} color="#ff5252" />
+                </TouchableOpacity>
               </View>
+              {post.date && (
+                <Text style={styles.cardDate}>{post.date}</Text>
+              )}
               <Text style={styles.cardTime}>
                 {post.startTime} - {post.endTime}
               </Text>
               <Text style={styles.cardItem}>{post.item}</Text>
               <Text style={styles.cardUser}>{post.userEmail}</Text>
-            </View>
+              <View style={styles.chatIndicator}>
+                <Ionicons name="chatbubble-outline" size={16} color="#4CAF50" />
+                <Text style={styles.chatText}>채팅하기</Text>
+              </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -246,6 +340,11 @@ const styles = StyleSheet.create({
   blockButton: {
     padding: 4,
   },
+  cardDate: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 4,
+  },
   cardTime: {
     fontSize: 14,
     color: '#666',
@@ -258,6 +357,20 @@ const styles = StyleSheet.create({
   cardUser: {
     fontSize: 12,
     color: '#999',
+  },
+  chatIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    gap: 6,
+  },
+  chatText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '500',
   },
   fab: {
     position: 'absolute',

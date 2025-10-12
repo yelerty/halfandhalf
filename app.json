@@ -13,14 +13,21 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.halfandhalf.app"
+      "bundleIdentifier": "com.halfandhalf.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "주변 대형마트를 찾기 위해 위치 정보가 필요합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.halfandhalf.app"
+      "package": "com.halfandhalf.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
