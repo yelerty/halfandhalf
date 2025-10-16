@@ -7,6 +7,7 @@ import { db, auth } from '../../config/firebase';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../../utils/location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 
 interface Post {
   id: string;
@@ -115,7 +116,12 @@ export default function HomeScreen() {
           if (post.userId === auth.currentUser?.uid) {
             saveExpiredPost(post);
           }
-          deletePromises.push(deleteDoc(doc(db, 'posts', docSnapshot.id)));
+          // 채팅 세션 삭제 후 게시글 삭제
+          deletePromises.push(
+            deleteChatSessionsForPost(docSnapshot.id).then(() =>
+              deleteDoc(doc(db, 'posts', docSnapshot.id))
+            )
+          );
         } else {
           postsData.push(post);
         }

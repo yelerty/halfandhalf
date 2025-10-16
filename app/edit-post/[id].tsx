@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 
 export default function EditPostScreen() {
   const router = useRouter();
@@ -119,8 +120,13 @@ export default function EditPostScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // 1. 관련 채팅 세션 삭제
+              await deleteChatSessionsForPost(id as string);
+
+              // 2. 게시글 삭제
               await deleteDoc(doc(db, 'posts', id as string));
-              Alert.alert('성공', '게시글이 삭제되었습니다.');
+
+              Alert.alert('성공', '게시글과 관련 채팅이 모두 삭제되었습니다.');
               router.back();
             } catch (error: any) {
               Alert.alert('오류', error.message);

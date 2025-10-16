@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, del
 import { db, auth } from '../../config/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 
 interface Post {
   id: string;
@@ -58,8 +59,12 @@ export default function MyPostsScreen() {
           expiredPosts.push(post);
           // 보관함에 저장
           await saveToArchive(post);
-          // 서버에서 삭제
-          deletePromises.push(deleteDoc(doc(db, 'posts', post.id)));
+          // 채팅 세션 삭제 후 서버에서 삭제
+          deletePromises.push(
+            deleteChatSessionsForPost(post.id).then(() =>
+              deleteDoc(doc(db, 'posts', post.id))
+            )
+          );
         }
       }
 
@@ -110,8 +115,12 @@ export default function MyPostsScreen() {
         if (isExpired) {
           // 보관함에 저장
           saveToArchive(post);
-          // 서버에서 삭제
-          deletePromises.push(deleteDoc(doc(db, 'posts', docSnapshot.id)));
+          // 채팅 세션 삭제 후 서버에서 삭제
+          deletePromises.push(
+            deleteChatSessionsForPost(docSnapshot.id).then(() =>
+              deleteDoc(doc(db, 'posts', docSnapshot.id))
+            )
+          );
         } else {
           postsData.push(post);
         }
