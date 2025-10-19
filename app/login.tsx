@@ -1,4 +1,4 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -25,49 +25,68 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>HalfAndHalf</Text>
-      <Text style={styles.subtitle}>대용량 공동구매 매칭</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+      >
+        <View style={styles.innerContainer}>
+          <Text style={styles.title}>HalfAndHalf</Text>
+          <Text style={styles.subtitle}>대용량 공동구매 매칭</Text>
 
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="이메일"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="비밀번호"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="이메일"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="비밀번호"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
 
-        <TouchableOpacity style={styles.button} onPress={handleAuth}>
-          <Text style={styles.buttonText}>
-            {isSignUp ? '회원가입' : '로그인'}
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={handleAuth}>
+              <Text style={styles.buttonText}>
+                {isSignUp ? '회원가입' : '로그인'}
+              </Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-          <Text style={styles.switchText}>
-            {isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+            <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
+              <Text style={styles.switchText}>
+                {isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  innerContainer: {
+    flex: 1,
     padding: 20,
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    minHeight: '100%',
   },
   title: {
     fontSize: 36,

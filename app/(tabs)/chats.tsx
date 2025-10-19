@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { collection, query, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 
 interface ChatSession {
@@ -11,6 +11,7 @@ interface ChatSession {
   postTitle: string;
   lastMessage: string;
   lastMessageTime: any;
+  unreadCount: number;
 }
 
 export default function ChatsScreen() {
@@ -33,22 +34,37 @@ export default function ChatsScreen() {
         const sessionData = sessionDoc.data();
         const sessionId = sessionData.sessionId;
 
+        // sessionId가 없으면 건너뛰기
+        if (!sessionId) continue;
+
+        // active가 false이거나 없으면 건너뛰기 (나간 채팅방)
+        if (sessionData.active === false) continue;
+
         try {
           // 채팅 세션 정보 가져오기
           const chatSessionDoc = await getDoc(doc(db, 'chatSessions', sessionId));
+
+          // 채팅 세션이 존재하는지 확인
           if (chatSessionDoc.exists()) {
             const chatData = chatSessionDoc.data();
 
-            // lastMessage가 있는 세션만 표시 (빈 채팅 세션 제외)
-            if (chatData.lastMessage) {
-              sessions.push({
-                sessionId,
-                postId: sessionData.postId,
-                postTitle: `${chatData.postStore} - ${chatData.postItem}`,
-                lastMessage: chatData.lastMessage,
-                lastMessageTime: chatData.lastMessageAt,
-              });
-            }
+            // 본인과의 채팅 세션 필터링
+            const participants = chatData.participants || [];
+            const uniqueParticipants = [...new Set(participants)];
+            if (uniqueParticipants.length === 1) continue;
+
+            // 채팅 세션 추가
+            sessions.push({
+              sessionId,
+              postId: sessionData.postId,
+              postTitle: `${chatData.postStore} - ${chatData.postItem}`,
+              lastMessage: chatData.lastMessage || '채팅을 시작해보세요',
+              lastMessageTime: chatData.lastMessageAt,
+              unreadCount: sessionData.unreadCount || 0,
+            });
+          } else {
+            // 채팅 세션이 삭제되었으면 내 참조도 삭제
+            await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionId));
           }
         } catch (error) {
           console.error('채팅 세션 로드 오류:', error);
@@ -85,10 +101,17 @@ export default function ChatsScreen() {
             <TouchableOpacity
               key={session.sessionId}
               style={styles.chatCard}
-              onPress={() => router.push(`/chat/${session.postId}`)}
+              onPress={() => router.push(`/chat/${session.sessionId}`)}
             >
               <View style={styles.iconContainer}>
                 <Ionicons name="chatbubbles" size={40} color="#4CAF50" />
+                {session.unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {session.unreadCount > 99 ? '99+' : session.unreadCount}
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={styles.chatInfo}>
                 <Text style={styles.postTitle}>{session.postTitle}</Text>
@@ -140,6 +163,24 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginRight: 12,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff3b30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   chatInfo: {
     flex: 1,

@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../../utils/location';
@@ -195,6 +195,62 @@ export default function HomeScreen() {
     }
   };
 
+  const handleStartChat = async (post: Post) => {
+    if (!auth.currentUser) return;
+
+    // 본인 게시글 체크
+    if (post.userId === auth.currentUser.uid) {
+      Alert.alert('알림', '본인이 작성한 게시글에는 채팅할 수 없습니다.');
+      return;
+    }
+
+    try {
+      // 채팅 세션 ID 생성
+      const participants = [auth.currentUser.uid, post.userId].sort();
+      const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
+
+      // 채팅 세션 생성 또는 확인
+      const sessionDocRef = doc(db, 'chatSessions', sessionId);
+      const existingSession = await getDoc(sessionDocRef);
+
+      if (!existingSession.exists()) {
+        // 새 채팅 세션 생성
+        await setDoc(sessionDocRef, {
+          postId: post.id,
+          postStore: post.store,
+          postItem: post.item,
+          participants,
+          createdAt: serverTimestamp(),
+          lastMessageAt: serverTimestamp(),
+        });
+      }
+
+      // 내 채팅 세션 참조 생성
+      await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId), {
+        postId: post.id,
+        sessionId,
+        active: true,
+        unreadCount: 0,
+        joinedAt: serverTimestamp(),
+      }, { merge: true });
+
+      // 상대방 채팅 세션 참조 생성
+      await setDoc(doc(db, 'users', post.userId, 'chatSessions', sessionId), {
+        postId: post.id,
+        sessionId,
+        active: true,
+        unreadCount: 0,
+        joinedAt: serverTimestamp(),
+      }, { merge: true });
+
+      // sessionId로 라우팅
+      router.push(`/chat/${sessionId}`);
+    } catch (error) {
+      console.error('채팅 시작 오류:', error);
+      Alert.alert('오류', '채팅을 시작할 수 없습니다.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -230,9 +286,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={post.id}
               style={styles.postCard}
-              onPress={() => {
-                router.push(`/chat/${post.id}`);
-              }}
+              onPress={() => handleStartChat(post)}
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{post.store}</Text>
