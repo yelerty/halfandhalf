@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // 헬퍼 함수: 사용자 인증 여부 확인
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 헬퍼 함수: 파일 크기 제한 (5MB)
+    function isValidSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // 헬퍼 함수: 이미지 파일 형식 확인
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // 사용자 프로필 이미지
+    match /users/{userId}/profile/{fileName} {
+      // 본인만 업로드 가능
+      allow write: if isAuthenticated()
+        && request.auth.uid == userId
+        && isValidSize()
+        && isImage();
+
+      // 본인만 읽기 가능
+      allow read: if isAuthenticated()
+        && request.auth.uid == userId;
+    }
+
+    // 게시글 이미지 (필요시)
+    match /posts/{postId}/{fileName} {
+      // 인증된 사용자만 업로드 가능
+      allow write: if isAuthenticated()
+        && isValidSize()
+        && isImage();
+
+      // 모든 인증된 사용자가 읽기 가능
+      allow read: if isAuthenticated();
+    }
+
+    // 기타 모든 파일 접근 거부
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

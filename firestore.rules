@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 헬퍼 함수: 사용자 인증 여부 확인
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 헬퍼 함수: 사용자 본인 확인
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 헬퍼 함수: 채팅 세션 참여자인지 확인
+    function isParticipant(participants) {
+      return isAuthenticated() && request.auth.uid in participants;
+    }
+
+    // users 컬렉션: 본인 데이터만 읽기/쓰기 가능
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+
+      // 사용자별 채팅 세션 참조
+      match /chatSessions/{sessionId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+    }
+
+    // posts 컬렉션
+    match /posts/{postId} {
+      // 모든 인증된 사용자가 게시글 읽기 가능
+      allow read: if isAuthenticated();
+
+      // 게시글 작성: 인증된 사용자만 가능
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['store', 'item', 'startTime', 'endTime', 'userEmail', 'userId', 'createdAt']);
+
+      // 게시글 수정/삭제: 작성자만 가능
+      allow update, delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // chatSessions 컬렉션
+    match /chatSessions/{sessionId} {
+      // 참여자만 채팅 세션 읽기 가능
+      allow read: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+
+      // 참여자만 채팅 세션 생성/수정 가능
+      allow create: if isAuthenticated()
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2;
+
+      allow update: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+
+      // 참여자만 채팅 세션 삭제 가능
+      allow delete: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+
+      // 채팅 메시지 컬렉션
+      match /messages/{messageId} {
+        // 참여자만 메시지 읽기 가능
+        allow read: if isAuthenticated()
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants;
+
+        // 참여자만 메시지 작성 가능
+        allow create: if isAuthenticated()
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants
+          && request.resource.data.senderId == request.auth.uid;
+
+        // 메시지 수정/삭제 금지 (채팅 메시지는 불변)
+        allow update, delete: if false;
+      }
+    }
+
+    // 기타 모든 문서 접근 거부
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
