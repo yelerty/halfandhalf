@@ -21,18 +21,35 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === '(tabs)';
-    const inLoginScreen = segments[0] === 'login';
+    const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'create-post' || segments[0] === 'edit-post' || segments[0] === 'chat';
 
-    if (!user && inAuthGroup) {
+    if (!user && !segments[0]) {
+      // 초기 로드 시 로그인 화면으로
+      router.replace('/login');
+    } else if (!user && inAuthGroup) {
       // 로그인 안되어있으면 로그인 화면으로
       router.replace('/login');
-    } else if (user && inLoginScreen) {
+    } else if (user && segments[0] === 'login') {
       // 로그인 되어있으면 메인으로
       router.replace('/(tabs)');
     }
   }, [user, segments, loading]);
 
+  // 로딩 중이거나 로그인 안된 상태에서는 최소한의 스택만 렌더링
+  if (loading) {
+    return null;
+  }
+
+  // 로그인 안된 상태에서는 login 화면만 렌더링 (권한 에러 완전 방지)
+  if (!user) {
+    return (
+      <Stack>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+      </Stack>
+    );
+  }
+
+  // 로그인된 상태에서만 전체 스택 렌더링
   return (
     <Stack>
       <Stack.Screen name="login" options={{ headerShown: false }} />

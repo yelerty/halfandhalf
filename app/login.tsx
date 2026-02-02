@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import i18n from '../i18n';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -14,13 +15,13 @@ export default function LoginScreen() {
     try {
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, password);
-        Alert.alert('성공', '회원가입이 완료되었습니다!');
+        Alert.alert(i18n.t('common.success'), i18n.t('auth.registerSuccess'));
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      Alert.alert(i18n.t('common.error'), error.message);
     }
   };
 
@@ -36,13 +37,13 @@ export default function LoginScreen() {
         bounces={false}
       >
         <View style={styles.innerContainer}>
-          <Text style={styles.title}>HalfAndHalf</Text>
-          <Text style={styles.subtitle}>대용량 공동구매 매칭</Text>
+          <Text style={styles.title}>{i18n.t('app.name')}</Text>
+          <Text style={styles.subtitle}>{i18n.t('app.subtitle')}</Text>
 
           <View style={styles.form}>
             <TextInput
               style={styles.input}
-              placeholder="이메일"
+              placeholder={i18n.t('auth.email')}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -50,7 +51,7 @@ export default function LoginScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder="비밀번호"
+              placeholder={i18n.t('auth.password')}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -58,13 +59,13 @@ export default function LoginScreen() {
 
             <TouchableOpacity style={styles.button} onPress={handleAuth}>
               <Text style={styles.buttonText}>
-                {isSignUp ? '회원가입' : '로그인'}
+                {isSignUp ? i18n.t('auth.registerButton') : i18n.t('auth.loginButton')}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
               <Text style={styles.switchText}>
-                {isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
+                {isSignUp ? `${i18n.t('auth.hasAccount')} ${i18n.t('auth.login')}` : `${i18n.t('auth.noAccount')} ${i18n.t('auth.register')}`}
               </Text>
             </TouchableOpacity>
           </View>

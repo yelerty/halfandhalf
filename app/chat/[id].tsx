@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
+import i18n from '../../i18n';
 
 interface Message {
   id: string;
@@ -24,21 +25,26 @@ export default function ChatScreen() {
 
   // 채팅 세션 정보 가져오기
   useEffect(() => {
+    let isMounted = true;
+
     const loadChatSession = async () => {
-      if (!sessionIdFromParams) {
-        console.error('sessionId가 없습니다');
+      if (!sessionIdFromParams || !auth.currentUser) {
+        console.error('sessionId 또는 currentUser가 없습니다');
         return;
       }
 
       try {
+        if (!isMounted) return;
         setChatSessionId(sessionIdFromParams);
 
         // 채팅 세션 정보 가져오기
         const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
         const sessionDoc = await getDoc(sessionDocRef);
 
+        if (!isMounted) return;
+
         if (!sessionDoc.exists()) {
-          Alert.alert('알림', '채팅 세션이 존재하지 않습니다.');
+          Alert.alert(i18n.t('common.confirm'), i18n.t('chat.sessionNotFound'));
           router.back();
           return;
         }
@@ -48,37 +54,51 @@ export default function ChatScreen() {
 
         // 게시글 정보 가져오기
         const postDoc = await getDoc(doc(db, 'posts', postId));
+
+        if (!isMounted) return;
+
         if (postDoc.exists()) {
           const postData = { id: postDoc.id, ...postDoc.data() };
           setPostInfo(postData);
 
           // 읽음 처리 (채팅방 진입 시)
-          const mySessionRef = doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams);
-          await setDoc(mySessionRef, {
-            unreadCount: 0,
-            lastReadAt: serverTimestamp(),
-          }, { merge: true });
+          if (auth.currentUser) {
+            const mySessionRef = doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams);
+            await setDoc(mySessionRef, {
+              unreadCount: 0,
+              lastReadAt: serverTimestamp(),
+            }, { merge: true });
+          }
         } else {
           // 게시글이 삭제되었으면 세션도 정리
-          await deleteDoc(sessionDocRef);
-          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams));
+          if (auth.currentUser) {
+            await deleteDoc(sessionDocRef);
+            await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
+          }
 
-          Alert.alert('알림', '게시글이 삭제되어 채팅을 시작할 수 없습니다.');
+          Alert.alert(i18n.t('common.confirm'), i18n.t('chat.postDeleted'));
           router.back();
         }
       } catch (error) {
         console.error('채팅 세션 로드 오류:', error);
-        Alert.alert('오류', '채팅 세션을 불러올 수 없습니다.');
+        if (isMounted) {
+          Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
+        }
       }
     };
 
     loadChatSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, [sessionIdFromParams]);
 
   // 메시지 실시간 구독 및 읽음 처리
   useEffect(() => {
-    if (!chatSessionId) return;
+    if (!chatSessionId || !auth.currentUser) return;
 
+    const currentUserId = auth.currentUser.uid;
     const messagesCollectionRef = collection(db, 'chatSessions', chatSessionId, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
 
@@ -92,12 +112,18 @@ export default function ChatScreen() {
 
         setMessages(messagesData);
 
-        // 채팅방에 있으면 읽음 처리
+        // 채팅방에 있으면 읽음 처리 (최적화: unreadCount가 0이 아닐 때만)
         try {
-          await setDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', chatSessionId), {
-            unreadCount: 0,
-            lastReadAt: serverTimestamp(),
-          }, { merge: true });
+          const mySessionRef = doc(db, 'users', currentUserId, 'chatSessions', chatSessionId);
+          const mySession = await getDoc(mySessionRef);
+
+          // unreadCount가 0보다 크면 읽음 처리 (불필요한 쓰기 방지)
+          if (mySession.exists() && (mySession.data()?.unreadCount || 0) > 0) {
+            await setDoc(mySessionRef, {
+              unreadCount: 0,
+              lastReadAt: serverTimestamp(),
+            }, { merge: true });
+          }
         } catch (error) {
           console.error('읽음 처리 오류:', error);
         }
@@ -110,7 +136,7 @@ export default function ChatScreen() {
       (error) => {
         console.error('메시지 구독 오류:', error);
         if (error.code === 'permission-denied') {
-          Alert.alert('오류', 'Firebase 보안 규칙을 확인해주세요.');
+          Alert.alert(i18n.t('common.error'), i18n.t('errors.firebaseConfig'));
         }
       }
     );
@@ -119,33 +145,44 @@ export default function ChatScreen() {
   }, [chatSessionId]);
 
   const handleSend = async () => {
-    if (!message.trim() || !chatSessionId || !postInfo) return;
+    if (!message.trim() || !chatSessionId || !postInfo || !auth.currentUser) return;
+
+    const messageText = message.trim();
+    const currentUserId = auth.currentUser.uid;
 
     try {
-      // 채팅 세션에 메시지 저장
+      // 0. 채팅 세션이 여전히 존재하는지 확인 (게시글 삭제 등으로 세션이 사라질 수 있음)
+      const sessionDoc = await getDoc(doc(db, 'chatSessions', chatSessionId));
+      if (!sessionDoc.exists()) {
+        Alert.alert(i18n.t('common.error'), i18n.t('chat.sessionNotFound'));
+        router.back();
+        return;
+      }
+
+      // 1. 메시지 저장
       const messagesCollectionRef = collection(db, 'chatSessions', chatSessionId, 'messages');
       await addDoc(messagesCollectionRef, {
-        text: message.trim(),
-        senderId: auth.currentUser?.uid,
+        text: messageText,
+        senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
 
-      // 세션의 lastMessage 업데이트
+      // 2. 세션의 lastMessage 업데이트
       await setDoc(doc(db, 'chatSessions', chatSessionId), {
         lastMessageAt: serverTimestamp(),
-        lastMessage: message.trim(),
+        lastMessage: messageText,
       }, { merge: true });
 
-      // 상대방의 unreadCount 증가
-      const sessionDoc = await getDoc(doc(db, 'chatSessions', chatSessionId));
+      // 3. 상대방의 unreadCount 증가 (active인 경우에만)
       const participants = sessionDoc.data()?.participants || [];
-      const otherUserId = participants.find((id: string) => id !== auth.currentUser!.uid);
+      const otherUserId = participants.find((id: string) => id !== currentUserId);
 
       if (otherUserId) {
         const otherUserSessionRef = doc(db, 'users', otherUserId, 'chatSessions', chatSessionId);
         const otherUserSession = await getDoc(otherUserSessionRef);
 
-        if (otherUserSession.exists()) {
+        // 상대방이 채팅방에 참여 중이고 active 상태일 때만 unreadCount 증가
+        if (otherUserSession.exists() && otherUserSession.data()?.active !== false) {
           const currentUnreadCount = otherUserSession.data()?.unreadCount || 0;
           await setDoc(otherUserSessionRef, {
             unreadCount: currentUnreadCount + 1,
@@ -156,35 +193,49 @@ export default function ChatScreen() {
       setMessage('');
     } catch (error: any) {
       console.error('메시지 전송 오류:', error);
-      Alert.alert('오류', '메시지 전송에 실패했습니다.');
+
+      // 구체적인 오류 메시지 제공
+      let errorMessage = i18n.t('chat.sendError');
+      if (error.code === 'permission-denied') {
+        errorMessage = i18n.t('errors.firebaseConfig');
+      } else if (error.code === 'unavailable') {
+        errorMessage = i18n.t('errors.network');
+      }
+
+      Alert.alert(i18n.t('common.error'), errorMessage);
+
+      // 메시지 전송 실패 시 입력창 복구 (재시도 가능하도록)
+      // setMessage는 비우지 않음
     }
   };
 
   const handleLeaveChat = () => {
-    if (!chatSessionId || !postInfo) {
-      Alert.alert('오류', '채팅 세션 정보를 불러올 수 없습니다.');
+    if (!chatSessionId || !postInfo || !auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
       return;
     }
 
     Alert.alert(
-      '채팅방 나가기',
-      '정말 나가시겠습니까?',
+      i18n.t('chat.leaveChat'),
+      i18n.t('chat.leaveChatConfirm'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: '나가기',
+          text: i18n.t('chat.leaveChat'),
           style: 'destructive',
           onPress: async () => {
+            if (!auth.currentUser) return;
+
             try {
               // 내 채팅 세션 참조를 비활성화로 표시
-              await setDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', chatSessionId), {
+              await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', chatSessionId), {
                 active: false,
                 leftAt: serverTimestamp(),
               }, { merge: true });
 
               // 상대방 ID 찾기
-              const participants = [auth.currentUser!.uid, postInfo.userId];
-              const otherUserId = participants.find(id => id !== auth.currentUser!.uid);
+              const participants = [auth.currentUser.uid, postInfo.userId];
+              const otherUserId = participants.find(id => id !== auth.currentUser?.uid);
 
               if (otherUserId) {
                 const otherUserSessionDoc = await getDoc(
@@ -204,16 +255,18 @@ export default function ChatScreen() {
                   await deleteDoc(doc(db, 'chatSessions', chatSessionId));
 
                   // 양쪽 사용자의 채팅 세션 참조도 삭제
-                  await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', chatSessionId));
+                  if (auth.currentUser) {
+                    await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', chatSessionId));
+                  }
                   await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', chatSessionId));
                 }
               }
 
-              Alert.alert('알림', '채팅방에서 나갔습니다.');
+              Alert.alert(i18n.t('common.confirm'), i18n.t('chat.leftChat'));
               router.back();
             } catch (error: any) {
               console.error('채팅방 나가기 오류:', error);
-              Alert.alert('오류', error.message);
+              Alert.alert(i18n.t('common.error'), error.message);
             }
           },
         },
@@ -254,7 +307,7 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messagesContent}
       >
         {messages.length === 0 ? (
-          <Text style={styles.emptyText}>메시지를 보내서 대화를 시작하세요!</Text>
+          <Text style={styles.emptyText}>{i18n.t('chat.emptyMessage')}</Text>
         ) : (
           messages.map((msg) => (
             <View
@@ -272,7 +325,7 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder="메시지 입력..."
+          placeholder={i18n.t('chat.sendPlaceholder')}
           value={message}
           onChangeText={setMessage}
           multiline

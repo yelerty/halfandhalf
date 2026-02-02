@@ -5,6 +5,8 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { formatDate, formatTime } from '../utils/dateUtils';
+import i18n from '../i18n';
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -20,65 +22,70 @@ export default function CreatePostScreen() {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('권한 필요', '위치 권한이 필요합니다.');
+        if (isMounted) {
+          Alert.alert(i18n.t('common.error'), i18n.t('createPost.permissionRequired'));
+        }
         return;
       }
 
       const loc = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
+      if (isMounted) {
+        setLocation({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+      }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const formatTime = (date: Date) => {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
 
   const handleSubmit = async () => {
     if (!store || !item) {
-      Alert.alert('오류', '모든 필드를 입력해주세요');
+      Alert.alert(i18n.t('common.error'), i18n.t('createPost.fillAllFields'));
       return;
     }
 
     if (!location) {
-      Alert.alert('오류', '위치 정보를 가져오는 중입니다. 잠시 후 다시 시도해주세요.');
+      Alert.alert(i18n.t('common.error'), i18n.t('createPost.locationRequired'));
+      return;
+    }
+
+    if (!auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
       return;
     }
 
     try {
       setLoading(true);
+      const currentUserId = auth.currentUser.uid;
+      const currentUserEmail = auth.currentUser.email;
+
       await addDoc(collection(db, 'posts'), {
         store,
         item,
         date: formatDate(date),
         startTime: formatTime(startTime),
         endTime: formatTime(endTime),
-        userId: auth.currentUser?.uid,
-        userEmail: auth.currentUser?.email,
+        userId: currentUserId,
+        userEmail: currentUserEmail,
         location: {
           latitude: location.latitude,
           longitude: location.longitude,
         },
         createdAt: serverTimestamp(),
       });
-      Alert.alert('성공', '게시글이 등록되었습니다!');
+      Alert.alert(i18n.t('common.success'), i18n.t('createPost.success'));
       router.back();
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      Alert.alert(i18n.t('common.error'), error.message);
     } finally {
       setLoading(false);
     }
@@ -87,23 +94,23 @@ export default function CreatePostScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.label}>매장</Text>
+        <Text style={styles.label}>{i18n.t('createPost.store')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="예: 코스트코 양재점"
+          placeholder={i18n.t('createPost.storePlaceholder')}
           value={store}
           onChangeText={setStore}
         />
 
-        <Text style={styles.label}>나눔 물건</Text>
+        <Text style={styles.label}>{i18n.t('createPost.item')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="예: 키친타올 12롤"
+          placeholder={i18n.t('createPost.itemPlaceholder')}
           value={item}
           onChangeText={setItem}
         />
 
-        <Text style={styles.label}>날짜</Text>
+        <Text style={styles.label}>{i18n.t('createPost.date')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowDatePicker(true)}
@@ -111,7 +118,7 @@ export default function CreatePostScreen() {
           <Text style={styles.dateText}>{formatDate(date)}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>시작 시간</Text>
+        <Text style={styles.label}>{i18n.t('createPost.startTime')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowStartTimePicker(true)}
@@ -119,7 +126,7 @@ export default function CreatePostScreen() {
           <Text style={styles.dateText}>{formatTime(startTime)}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>종료 시간</Text>
+        <Text style={styles.label}>{i18n.t('createPost.endTime')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowEndTimePicker(true)}
@@ -133,7 +140,7 @@ export default function CreatePostScreen() {
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
-              setShowDatePicker(Platform.OS === 'ios');
+              setShowDatePicker(false);
               if (selectedDate) {
                 setDate(selectedDate);
               }
@@ -147,7 +154,7 @@ export default function CreatePostScreen() {
             mode="time"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedTime) => {
-              setShowStartTimePicker(Platform.OS === 'ios');
+              setShowStartTimePicker(false);
               if (selectedTime) {
                 setStartTime(selectedTime);
               }
@@ -161,7 +168,7 @@ export default function CreatePostScreen() {
             mode="time"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedTime) => {
-              setShowEndTimePicker(Platform.OS === 'ios');
+              setShowEndTimePicker(false);
               if (selectedTime) {
                 setEndTime(selectedTime);
               }
@@ -175,7 +182,7 @@ export default function CreatePostScreen() {
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? '등록 중...' : '등록하기'}
+            {loading ? i18n.t('createPost.submitting') : i18n.t('createPost.submit')}
           </Text>
         </TouchableOpacity>
       </View>

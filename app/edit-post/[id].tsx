@@ -6,6 +6,8 @@ import { db, auth } from '../../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteChatSessionsForPost } from '../../utils/chatUtils';
+import { formatDate, formatTime, parseDate, parseTime } from '../../utils/dateUtils';
+import i18n from '../../i18n';
 
 export default function EditPostScreen() {
   const router = useRouter();
@@ -25,19 +27,13 @@ export default function EditPostScreen() {
     loadPost();
   }, [id]);
 
-  const parseDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    return new Date(year, month - 1, day);
-  };
-
-  const parseTime = (timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return date;
-  };
-
   const loadPost = async () => {
+    if (!auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), '로그인이 필요합니다');
+      router.back();
+      return;
+    }
+
     try {
       const postDoc = await getDoc(doc(db, 'posts', id as string));
       if (postDoc.exists()) {
@@ -51,27 +47,14 @@ export default function EditPostScreen() {
         setEndTime(parseTime(data.endTime));
       }
     } catch (error) {
-      Alert.alert('오류', '게시글을 불러올 수 없습니다.');
+      Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
       router.back();
     }
   };
 
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const formatTime = (date: Date) => {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
   const handleUpdate = async () => {
     if (!store || !item) {
-      Alert.alert('오류', '모든 필드를 입력해주세요');
+      Alert.alert(i18n.t('common.error'), i18n.t('createPost.fillAllFields'));
       return;
     }
 
@@ -100,10 +83,10 @@ export default function EditPostScreen() {
         }
       }
 
-      Alert.alert('성공', isRepostMode ? '게시글이 재등록되었습니다!' : '게시글이 수정되었습니다!');
+      Alert.alert(i18n.t('common.success'), isRepostMode ? i18n.t('editPost.repostSuccess') : i18n.t('editPost.updateSuccess'));
       router.back();
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      Alert.alert(i18n.t('common.error'), error.message);
     } finally {
       setLoading(false);
     }
@@ -111,12 +94,12 @@ export default function EditPostScreen() {
 
   const handleDelete = () => {
     Alert.alert(
-      '게시글 삭제',
-      '정말 삭제하시겠습니까? (관련 채팅도 모두 삭제됩니다)',
+      i18n.t('editPost.deletePost'),
+      i18n.t('editPost.deleteConfirm'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: '삭제',
+          text: i18n.t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -126,10 +109,10 @@ export default function EditPostScreen() {
               // 2. 게시글 삭제
               await deleteDoc(doc(db, 'posts', id as string));
 
-              Alert.alert('성공', '게시글과 관련 채팅이 모두 삭제되었습니다.');
+              Alert.alert(i18n.t('common.success'), i18n.t('editPost.deleteSuccess'));
               router.back();
             } catch (error: any) {
-              Alert.alert('오류', error.message);
+              Alert.alert(i18n.t('common.error'), error.message);
             }
           },
         },
@@ -140,23 +123,23 @@ export default function EditPostScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.label}>매장</Text>
+        <Text style={styles.label}>{i18n.t('createPost.store')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="예: 코스트코 양재점"
+          placeholder={i18n.t('createPost.storePlaceholder')}
           value={store}
           onChangeText={setStore}
         />
 
-        <Text style={styles.label}>나눔 물건</Text>
+        <Text style={styles.label}>{i18n.t('createPost.item')}</Text>
         <TextInput
           style={styles.input}
-          placeholder="예: 키친타올 12롤"
+          placeholder={i18n.t('createPost.itemPlaceholder')}
           value={item}
           onChangeText={setItem}
         />
 
-        <Text style={styles.label}>날짜</Text>
+        <Text style={styles.label}>{i18n.t('createPost.date')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowDatePicker(true)}
@@ -164,7 +147,7 @@ export default function EditPostScreen() {
           <Text style={styles.dateText}>{formatDate(date)}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>시작 시간</Text>
+        <Text style={styles.label}>{i18n.t('createPost.startTime')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowStartTimePicker(true)}
@@ -172,7 +155,7 @@ export default function EditPostScreen() {
           <Text style={styles.dateText}>{formatTime(startTime)}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>종료 시간</Text>
+        <Text style={styles.label}>{i18n.t('createPost.endTime')}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowEndTimePicker(true)}
@@ -186,7 +169,7 @@ export default function EditPostScreen() {
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
-              setShowDatePicker(Platform.OS === 'ios');
+              setShowDatePicker(false);
               if (selectedDate) {
                 setDate(selectedDate);
               }
@@ -200,7 +183,7 @@ export default function EditPostScreen() {
             mode="time"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedTime) => {
-              setShowStartTimePicker(Platform.OS === 'ios');
+              setShowStartTimePicker(false);
               if (selectedTime) {
                 setStartTime(selectedTime);
               }
@@ -214,7 +197,7 @@ export default function EditPostScreen() {
             mode="time"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedTime) => {
-              setShowEndTimePicker(Platform.OS === 'ios');
+              setShowEndTimePicker(false);
               if (selectedTime) {
                 setEndTime(selectedTime);
               }
@@ -229,15 +212,15 @@ export default function EditPostScreen() {
         >
           <Text style={styles.buttonText}>
             {loading
-              ? (isRepostMode ? '재등록 중...' : '수정 중...')
-              : (isRepostMode ? '수정해서 재등록' : '수정하기')
+              ? (isRepostMode ? i18n.t('editPost.reposting') : i18n.t('editPost.updating'))
+              : (isRepostMode ? i18n.t('editPost.repost') : i18n.t('editPost.update'))
             }
           </Text>
         </TouchableOpacity>
 
         {!isRepostMode && (
           <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-            <Text style={styles.deleteButtonText}>게시글 삭제</Text>
+            <Text style={styles.deleteButtonText}>{i18n.t('editPost.deletePost')}</Text>
           </TouchableOpacity>
         )}
       </View>

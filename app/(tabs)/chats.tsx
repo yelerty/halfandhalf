@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { collection, query, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
+import i18n from '../../i18n';
 
 interface ChatSession {
   sessionId: string;
@@ -22,80 +23,104 @@ export default function ChatsScreen() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    let isMounted = true;
+
     // 내 채팅 세션 실시간 구독
     const q = query(
       collection(db, 'users', auth.currentUser.uid, 'chatSessions')
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const sessions: ChatSession[] = [];
+    const unsubscribe = onSnapshot(
+      q,
+      async (snapshot) => {
+        const sessions: ChatSession[] = [];
 
-      for (const sessionDoc of snapshot.docs) {
-        const sessionData = sessionDoc.data();
-        const sessionId = sessionData.sessionId;
+        for (const sessionDoc of snapshot.docs) {
+          const sessionData = sessionDoc.data();
+          const sessionId = sessionData.sessionId;
 
-        // sessionId가 없으면 건너뛰기
-        if (!sessionId) continue;
+          // sessionId가 없으면 건너뛰기
+          if (!sessionId) continue;
 
-        // active가 false이거나 없으면 건너뛰기 (나간 채팅방)
-        if (sessionData.active === false) continue;
+          // active가 false이거나 없으면 건너뛰기 (나간 채팅방)
+          if (sessionData.active === false) continue;
 
-        try {
-          // 채팅 세션 정보 가져오기
-          const chatSessionDoc = await getDoc(doc(db, 'chatSessions', sessionId));
+          try {
+            // 채팅 세션 정보 가져오기
+            const chatSessionDoc = await getDoc(doc(db, 'chatSessions', sessionId));
 
-          // 채팅 세션이 존재하는지 확인
-          if (chatSessionDoc.exists()) {
-            const chatData = chatSessionDoc.data();
+            if (!isMounted) break;
 
-            // 본인과의 채팅 세션 필터링
-            const participants = chatData.participants || [];
-            const uniqueParticipants = [...new Set(participants)];
-            if (uniqueParticipants.length === 1) continue;
+            // 채팅 세션이 존재하는지 확인
+            if (chatSessionDoc.exists()) {
+              const chatData = chatSessionDoc.data();
 
-            // 채팅 세션 추가
-            sessions.push({
-              sessionId,
-              postId: sessionData.postId,
-              postTitle: `${chatData.postStore} - ${chatData.postItem}`,
-              lastMessage: chatData.lastMessage || '채팅을 시작해보세요',
-              lastMessageTime: chatData.lastMessageAt,
-              unreadCount: sessionData.unreadCount || 0,
-            });
-          } else {
-            // 채팅 세션이 삭제되었으면 내 참조도 삭제
-            await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionId));
+              // 본인과의 채팅 세션 필터링
+              const participants = chatData.participants || [];
+              const uniqueParticipants = [...new Set(participants)];
+              if (uniqueParticipants.length === 1) continue;
+
+              // 채팅 세션 추가
+              sessions.push({
+                sessionId,
+                postId: sessionData.postId,
+                postTitle: `${chatData.postStore} - ${chatData.postItem}`,
+                lastMessage: chatData.lastMessage || i18n.t('chats.startChatting'),
+                lastMessageTime: chatData.lastMessageAt,
+                unreadCount: sessionData.unreadCount || 0,
+              });
+            } else {
+              // 채팅 세션이 삭제되었으면 내 참조도 삭제
+              if (auth.currentUser && isMounted) {
+                await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId));
+              }
+            }
+          } catch (error) {
+            console.error('채팅 세션 로드 오류:', error);
           }
-        } catch (error) {
-          console.error('채팅 세션 로드 오류:', error);
         }
+
+        if (!isMounted) return;
+
+        // 최신 메시지 순으로 정렬
+        sessions.sort((a, b) => {
+          if (!a.lastMessageTime) return 1;
+          if (!b.lastMessageTime) return -1;
+          return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
+        });
+
+        setChatSessions(sessions);
+        setLoading(false);
+      },
+      (error) => {
+        // 권한 에러는 로그인 전이므로 무시
+        if (error.code === 'permission-denied') {
+          console.log('Still loading auth state...');
+          setLoading(false);
+          return;
+        }
+        console.error('채팅 세션 로딩 오류:', error);
+        setLoading(false);
       }
+    );
 
-      // 최신 메시지 순으로 정렬
-      sessions.sort((a, b) => {
-        if (!a.lastMessageTime) return 1;
-        if (!b.lastMessageTime) return -1;
-        return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
-      });
-
-      setChatSessions(sessions);
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>채팅</Text>
+        <Text style={styles.title}>{i18n.t('chats.title')}</Text>
       </View>
 
       <ScrollView style={styles.content}>
         {loading ? (
           <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 40 }} />
         ) : chatSessions.length === 0 ? (
-          <Text style={styles.emptyText}>채팅 세션이 없습니다</Text>
+          <Text style={styles.emptyText}>{i18n.t('chats.noChats')}</Text>
         ) : (
           chatSessions.map((session) => (
             <TouchableOpacity

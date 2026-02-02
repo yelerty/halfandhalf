@@ -7,6 +7,8 @@ import { db, auth } from '../../config/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { deleteChatSessionsForPost } from '../../utils/chatUtils';
+import { formatDate, formatTime, isPostExpired } from '../../utils/dateUtils';
+import i18n from '../../i18n';
 
 interface Post {
   id: string;
@@ -37,25 +39,19 @@ export default function MyPostsScreen() {
 
   // 주기적으로 만료된 게시글 체크 (1분마다)
   useEffect(() => {
+    let isMounted = true;
+
     const checkExpiredPosts = async () => {
-      if (!auth.currentUser || posts.length === 0) return;
+      if (!auth.currentUser || posts.length === 0 || !isMounted) return;
 
       const now = new Date();
       const expiredPosts: Post[] = [];
       const deletePromises: Promise<void>[] = [];
 
       for (const post of posts) {
-        let isExpired = false;
-        if (post.date && post.endTime) {
-          const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        } else if (post.endTime) {
-          const today = now.toISOString().split('T')[0];
-          const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        }
+        if (!isMounted) break;
 
-        if (isExpired) {
+        if (isPostExpired(post)) {
           expiredPosts.push(post);
           // 보관함에 저장
           await saveToArchive(post);
@@ -68,7 +64,7 @@ export default function MyPostsScreen() {
         }
       }
 
-      if (deletePromises.length > 0) {
+      if (deletePromises.length > 0 && isMounted) {
         await Promise.all(deletePromises);
         // 보관함 새로고침
         loadArchivedPosts();
@@ -81,11 +77,16 @@ export default function MyPostsScreen() {
     // 컴포넌트 마운트 시 즉시 한 번 실행
     checkExpiredPosts();
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [posts]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
+
+    let isMounted = true;
 
     const q = query(
       collection(db, 'posts'),
@@ -98,21 +99,11 @@ export default function MyPostsScreen() {
       const deletePromises: Promise<void>[] = [];
 
       for (const docSnapshot of snapshot.docs) {
+        if (!isMounted) break;
+
         const post = { id: docSnapshot.id, ...docSnapshot.data() } as Post;
 
-        // 날짜와 시간을 결합하여 만료 여부 확인
-        let isExpired = false;
-        if (post.date && post.endTime) {
-          const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        } else if (post.endTime) {
-          // 날짜가 없는 경우 (기존 게시글 호환성)
-          const today = now.toISOString().split('T')[0];
-          const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        }
-
-        if (isExpired) {
+        if (isPostExpired(post)) {
           // 보관함에 저장
           saveToArchive(post);
           // 채팅 세션 삭제 후 서버에서 삭제
@@ -129,6 +120,8 @@ export default function MyPostsScreen() {
       // 만료된 게시글 삭제
       await Promise.all(deletePromises);
 
+      if (!isMounted) return;
+
       // 클라이언트에서 정렬 (createdAt 기준 내림차순)
       postsData.sort((a, b) => {
         if (!a.createdAt) return 1;
@@ -142,15 +135,28 @@ export default function MyPostsScreen() {
       // 보관함 새로고침
       loadArchivedPosts();
     }, (error) => {
+      // 권한 에러는 로그인 전이므로 무시
+      if (error.code === 'permission-denied') {
+        console.log('Still loading auth state...');
+        if (isMounted) {
+          setLoading(false);
+        }
+        return;
+      }
       console.error('내 게시글 로드 오류:', error);
-      setLoading(false);
-      Alert.alert('오류', '게시글을 불러올 수 없습니다.');
+      if (isMounted) {
+        setLoading(false);
+        Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
+      }
     });
 
     // 보관된 게시글 로드
     loadArchivedPosts();
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const saveToArchive = async (post: Post) => {
@@ -195,7 +201,7 @@ export default function MyPostsScreen() {
       // 위치 정보 가져오기
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('권한 필요', '위치 권한이 필요합니다.');
+        Alert.alert(i18n.t('common.error'), i18n.t('createPost.permissionRequired'));
         return;
       }
 
@@ -205,19 +211,6 @@ export default function MyPostsScreen() {
       const now = new Date();
       const startDate = new Date(now.getTime());
       const endDate = new Date(now.getTime() + 30 * 60 * 1000); // 30분 후
-
-      const formatTime = (date: Date) => {
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${hours}:${minutes}`;
-      };
-
-      const formatDate = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
 
       // 임시 게시글 생성 (수정 화면으로 이동하기 위해)
       const tempPostRef = await addDoc(collection(db, 'posts'), {
@@ -238,18 +231,18 @@ export default function MyPostsScreen() {
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      Alert.alert(i18n.t('common.error'), error.message);
     }
   };
 
   const handleDeleteArchived = async (postId: string) => {
     Alert.alert(
-      '보관된 게시글 삭제',
-      '정말 삭제하시겠습니까?',
+      i18n.t('myPosts.deleteArchivedTitle'),
+      i18n.t('myPosts.deleteArchivedMessage'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: '삭제',
+          text: i18n.t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -260,10 +253,10 @@ export default function MyPostsScreen() {
                 const filtered = archived.filter((p: Post) => p.id !== postId);
                 await AsyncStorage.setItem(key, JSON.stringify(filtered));
                 setArchivedPosts(filtered);
-                Alert.alert('성공', '게시글이 삭제되었습니다.');
+                Alert.alert(i18n.t('common.success'), i18n.t('myPosts.deleteSuccess'));
               }
             } catch (error: any) {
-              Alert.alert('오류', error.message);
+              Alert.alert(i18n.t('common.error'), error.message);
             }
           },
         },
@@ -274,7 +267,7 @@ export default function MyPostsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>내 게시글</Text>
+        <Text style={styles.title}>{i18n.t('myPosts.title')}</Text>
       </View>
 
       {/* 탭 전환 버튼 */}
@@ -284,7 +277,7 @@ export default function MyPostsScreen() {
           onPress={() => setShowArchived(false)}
         >
           <Text style={[styles.tabText, !showArchived && styles.tabTextActive]}>
-            활성 게시글
+            {i18n.t('myPosts.activePosts')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -292,7 +285,7 @@ export default function MyPostsScreen() {
           onPress={() => setShowArchived(true)}
         >
           <Text style={[styles.tabText, showArchived && styles.tabTextActive]}>
-            보관함 ({archivedPosts.length})
+            {i18n.t('myPosts.archive')} ({archivedPosts.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -302,7 +295,7 @@ export default function MyPostsScreen() {
           <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 40 }} />
         ) : showArchived ? (
           archivedPosts.length === 0 ? (
-            <Text style={styles.emptyText}>보관된 게시글이 없습니다</Text>
+            <Text style={styles.emptyText}>{i18n.t('myPosts.noArchivedPosts')}</Text>
           ) : (
             archivedPosts.map((post) => (
               <View key={post.id} style={styles.postCard}>
@@ -323,21 +316,21 @@ export default function MyPostsScreen() {
                 </Text>
                 <Text style={styles.cardItem}>{post.item}</Text>
                 <Text style={styles.expiredText}>
-                  만료됨: {new Date(post.expiredAt || '').toLocaleDateString()}
+                  {i18n.t('myPosts.expired')}: {new Date(post.expiredAt || '').toLocaleDateString()}
                 </Text>
                 <TouchableOpacity
                   style={styles.repostButton}
                   onPress={() => handleRepost(post)}
                 >
                   <Ionicons name="refresh-outline" size={16} color="#4CAF50" />
-                  <Text style={styles.repostText}>재등록</Text>
+                  <Text style={styles.repostText}>{i18n.t('myPosts.repost')}</Text>
                 </TouchableOpacity>
               </View>
             ))
           )
         ) : (
           posts.length === 0 ? (
-            <Text style={styles.emptyText}>등록한 게시글이 없습니다</Text>
+            <Text style={styles.emptyText}>{i18n.t('myPosts.noActivePosts')}</Text>
           ) : (
             posts.map((post) => (
               <TouchableOpacity
@@ -357,7 +350,7 @@ export default function MyPostsScreen() {
                 <Text style={styles.cardItem}>{post.item}</Text>
                 <View style={styles.editIndicator}>
                   <Ionicons name="pencil-outline" size={16} color="#4CAF50" />
-                  <Text style={styles.editText}>수정하기</Text>
+                  <Text style={styles.editText}>{i18n.t('myPosts.editPost')}</Text>
                 </View>
               </TouchableOpacity>
             ))

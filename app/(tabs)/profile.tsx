@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import i18n from '../../i18n';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -13,14 +14,32 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        setBlacklist(docSnapshot.data()?.blacklist || []);
-      }
-    });
+    let isMounted = true;
 
-    return unsubscribe;
+    const userDocRef = doc(db, 'users', auth.currentUser.uid);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnapshot) => {
+        if (!isMounted) return;
+
+        if (docSnapshot.exists()) {
+          setBlacklist(docSnapshot.data()?.blacklist || []);
+        }
+      },
+      (error) => {
+        // 권한 에러는 로그인 전이므로 무시
+        if (error.code === 'permission-denied') {
+          console.log('Still loading auth state...');
+          return;
+        }
+        console.error('블랙리스트 로딩 오류:', error);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -36,7 +55,8 @@ export default function ProfileScreen() {
     if (!auth.currentUser) return;
 
     try {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const currentUserId = auth.currentUser.uid;
+      const userDocRef = doc(db, 'users', currentUserId);
       const updatedBlacklist = blacklist.filter(id => id !== userId);
 
       await setDoc(userDocRef, {
@@ -56,9 +76,9 @@ export default function ProfileScreen() {
 
       <ScrollView style={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>블랙리스트 ({blacklist.length})</Text>
+          <Text style={styles.sectionTitle}>{i18n.t('profile.blacklist')} ({blacklist.length})</Text>
           {blacklist.length === 0 ? (
-            <Text style={styles.emptyText}>블랙리스트가 비어있습니다</Text>
+            <Text style={styles.emptyText}>{i18n.t('profile.noBlacklistedUsers')}</Text>
           ) : (
             blacklist.map((userId) => (
               <View key={userId} style={styles.blacklistItem}>
@@ -73,7 +93,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>로그아웃</Text>
+        <Text style={styles.logoutText}>{i18n.t('auth.logout')}</Text>
       </TouchableOpacity>
     </View>
   );
