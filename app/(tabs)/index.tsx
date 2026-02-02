@@ -1,13 +1,15 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, getDocs, setDoc, serverTimestamp, limit, startAfter, runTransaction } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../../utils/location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteChatSessionsForPost } from '../../utils/chatUtils';
+import { isPostExpired } from '../../utils/dateUtils';
+import i18n from '../../i18n';
 
 interface Post {
   id: string;
@@ -25,6 +27,8 @@ interface Post {
   createdAt: any;
 }
 
+const PAGE_SIZE = 20;
+
 export default function HomeScreen() {
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -33,6 +37,12 @@ export default function HomeScreen() {
   const [storeFilter, setStoreFilter] = useState('');
   const [blacklist, setBlacklist] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const blacklistSet = useMemo(() => new Set(blacklist), [blacklist]);
 
   // 만료된 게시글을 로컬에 저장
   const saveExpiredPost = async (post: Post) => {
@@ -76,47 +86,57 @@ export default function HomeScreen() {
     if (!auth.currentUser) return;
 
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        setBlacklist(docSnapshot.data()?.blacklist || []);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          setBlacklist(docSnapshot.data()?.blacklist || []);
+        }
+      },
+      (error) => {
+        // 권한 에러는 로그인 전이므로 무시
+        if (error.code === 'permission-denied') {
+          console.log('Still loading auth state...');
+          return;
+        }
+        console.error('블랙리스트 로딩 오류:', error);
       }
-    });
+    );
 
     return unsubscribe;
   }, []);
 
-  // 게시글 불러오기 & 만료된 게시글 삭제
-  useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+  // 게시글 불러오기 & 만료된 게시글 삭제 (페이지네이션)
+  const loadPosts = useCallback(async (isRefresh = false) => {
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const now = new Date();
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
+    try {
+      const q = query(
+        collection(db, 'posts'),
+        orderBy('createdAt', 'desc'),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(q);
       const postsData: Post[] = [];
       const deletePromises: Promise<void>[] = [];
 
       for (const docSnapshot of snapshot.docs) {
         const post = { id: docSnapshot.id, ...docSnapshot.data() } as Post;
 
-        // 날짜와 시간을 결합하여 만료 여부 확인
-        let isExpired = false;
-        if (post.date && post.endTime) {
-          // 날짜와 시간을 결합하여 Date 객체 생성
-          const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        } else if (post.endTime) {
-          // 날짜가 없는 경우 (기존 게시글 호환성) - 오늘 날짜 기준으로 비교
-          const today = now.toISOString().split('T')[0];
-          const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
-          isExpired = postEndDateTime < now;
-        }
-
-        if (isExpired) {
-          // 내 게시글이면 로컬에 저장
+        if (isPostExpired(post)) {
           if (post.userId === auth.currentUser?.uid) {
             saveExpiredPost(post);
           }
-          // 채팅 세션 삭제 후 게시글 삭제
           deletePromises.push(
             deleteChatSessionsForPost(docSnapshot.id).then(() =>
               deleteDoc(doc(db, 'posts', docSnapshot.id))
@@ -127,14 +147,71 @@ export default function HomeScreen() {
         }
       }
 
-      // 만료된 게시글 삭제
       await Promise.all(deletePromises);
 
       setPosts(postsData);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        console.log('Still loading auth state...');
+      } else {
+        console.error('게시글 로딩 오류:', error);
+      }
+    } finally {
       setLoading(false);
-    });
+      setRefreshing(false);
+    }
+  }, []);
 
-    return unsubscribe;
+  const loadMorePosts = useCallback(async () => {
+    if (!auth.currentUser || !lastDoc || !hasMore || loadingMore) return;
+
+    setLoadingMore(true);
+
+    try {
+      const q = query(
+        collection(db, 'posts'),
+        orderBy('createdAt', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(q);
+      const postsData: Post[] = [];
+      const deletePromises: Promise<void>[] = [];
+
+      for (const docSnapshot of snapshot.docs) {
+        const post = { id: docSnapshot.id, ...docSnapshot.data() } as Post;
+
+        if (isPostExpired(post)) {
+          if (post.userId === auth.currentUser?.uid) {
+            saveExpiredPost(post);
+          }
+          deletePromises.push(
+            deleteChatSessionsForPost(docSnapshot.id).then(() =>
+              deleteDoc(doc(db, 'posts', docSnapshot.id))
+            )
+          );
+        } else {
+          postsData.push(post);
+        }
+      }
+
+      await Promise.all(deletePromises);
+
+      setPosts(prev => [...prev, ...postsData]);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (error) {
+      console.error('추가 게시글 로딩 오류:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [lastDoc, hasMore, loadingMore]);
+
+  useEffect(() => {
+    loadPosts();
   }, []);
 
   // 필터링 (내 게시글 제외 & 매장 & 블랙리스트 & 30km 반경)
@@ -168,65 +245,77 @@ export default function HomeScreen() {
     }
 
     // 블랙리스트 필터
-    filtered = filtered.filter(post => !blacklist.includes(post.userId));
+    filtered = filtered.filter(post => !blacklistSet.has(post.userId));
 
     setFilteredPosts(filtered);
-  }, [posts, storeFilter, blacklist, userLocation]);
+  }, [posts, storeFilter, blacklistSet, userLocation]);
 
   const handleAddToBlacklist = async (userId: string, userEmail: string) => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
+      return;
+    }
 
     try {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const currentUserId = auth.currentUser.uid;
+      const userDocRef = doc(db, 'users', currentUserId);
       const userDoc = await getDoc(userDocRef);
 
       const currentBlacklist = userDoc.exists() ? (userDoc.data()?.blacklist || []) : [];
 
       if (!currentBlacklist.includes(userId)) {
-        const { setDoc } = await import('firebase/firestore');
         await setDoc(userDocRef, {
           blacklist: [...currentBlacklist, userId]
         }, { merge: true });
 
-        alert(`${userEmail}님을 블랙리스트에 추가했습니다.`);
+        Alert.alert(i18n.t('common.success'), `${userEmail}${i18n.t('home.addedToBlacklist')}`);
       }
     } catch (error) {
       console.error('블랙리스트 추가 오류:', error);
+      Alert.alert(i18n.t('common.error'), i18n.t('errors.generic'));
     }
   };
 
   const handleStartChat = async (post: Post) => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
+      return;
+    }
 
     // 본인 게시글 체크
     if (post.userId === auth.currentUser.uid) {
-      Alert.alert('알림', '본인이 작성한 게시글에는 채팅할 수 없습니다.');
+      Alert.alert(i18n.t('common.confirm'), i18n.t('home.cannotChatOwnPost'));
       return;
     }
 
     try {
-      // 채팅 세션 ID 생성
-      const participants = [auth.currentUser.uid, post.userId].sort();
+      const currentUserId = auth.currentUser.uid;
+
+      // 채팅 세션 ID 생성 (일관된 순서 보장)
+      const participants = [currentUserId, post.userId].sort();
       const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
 
-      // 채팅 세션 생성 또는 확인
       const sessionDocRef = doc(db, 'chatSessions', sessionId);
-      const existingSession = await getDoc(sessionDocRef);
 
-      if (!existingSession.exists()) {
-        // 새 채팅 세션 생성
-        await setDoc(sessionDocRef, {
-          postId: post.id,
-          postStore: post.store,
-          postItem: post.item,
-          participants,
-          createdAt: serverTimestamp(),
-          lastMessageAt: serverTimestamp(),
-        });
-      }
+      // 트랜잭션으로 채팅 세션 원자적 생성 (race condition 방지)
+      await runTransaction(db, async (transaction) => {
+        const existingSession = await transaction.get(sessionDocRef);
 
-      // 내 채팅 세션 참조 생성
-      await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId), {
+        if (!existingSession.exists()) {
+          transaction.set(sessionDocRef, {
+            postId: post.id,
+            postStore: post.store,
+            postItem: post.item,
+            participants,
+            createdAt: serverTimestamp(),
+            lastMessageAt: serverTimestamp(),
+            lastMessage: '',
+          });
+        }
+      });
+
+      // 내 채팅 세션 참조 생성 (merge로 멱등성 보장, unreadCount 초기화)
+      await setDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionId), {
         postId: post.id,
         sessionId,
         active: true,
@@ -234,12 +323,12 @@ export default function HomeScreen() {
         joinedAt: serverTimestamp(),
       }, { merge: true });
 
-      // 상대방 채팅 세션 참조 생성
+      // 상대방 채팅 세션 참조 생성/업데이트 (merge로 멱등성 보장)
+      // unreadCount를 포함하지 않아 기존 읽지 않은 메시지 수를 보존
       await setDoc(doc(db, 'users', post.userId, 'chatSessions', sessionId), {
         postId: post.id,
         sessionId,
         active: true,
-        unreadCount: 0,
         joinedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -247,21 +336,21 @@ export default function HomeScreen() {
       router.push(`/chat/${sessionId}`);
     } catch (error) {
       console.error('채팅 시작 오류:', error);
-      Alert.alert('오류', '채팅을 시작할 수 없습니다.');
+      Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>HalfAndHalf</Text>
-        <Text style={styles.subtitle}>대용량 공동구매 매칭</Text>
+        <Text style={styles.title}>{i18n.t('app.name')}</Text>
+        <Text style={styles.subtitle}>{i18n.t('app.subtitle')}</Text>
 
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="매장 검색 (예: 코스트코)"
+            placeholder={i18n.t('home.searchPlaceholder')}
             value={storeFilter}
             onChangeText={setStoreFilter}
             placeholderTextColor="#999"
@@ -274,12 +363,22 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadPosts(true)}
+            colors={['#4CAF50']}
+            tintColor="#4CAF50"
+          />
+        }
+      >
         {loading ? (
           <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 40 }} />
         ) : filteredPosts.length === 0 ? (
           <Text style={styles.emptyText}>
-            {storeFilter ? '검색 결과가 없습니다' : '아직 게시글이 없습니다'}
+            {storeFilter ? i18n.t('home.noResults') : i18n.t('home.noPosts')}
           </Text>
         ) : (
           filteredPosts.map((post) => (
@@ -310,10 +409,23 @@ export default function HomeScreen() {
               <Text style={styles.cardUser}>{post.userEmail}</Text>
               <View style={styles.chatIndicator}>
                 <Ionicons name="chatbubble-outline" size={16} color="#4CAF50" />
-                <Text style={styles.chatText}>채팅하기</Text>
+                <Text style={styles.chatText}>{i18n.t('home.chatWith')}</Text>
               </View>
             </TouchableOpacity>
           ))
+        )}
+        {hasMore && !loading && filteredPosts.length > 0 && (
+          <TouchableOpacity
+            style={styles.loadMoreButton}
+            onPress={loadMorePosts}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color="#4CAF50" />
+            ) : (
+              <Text style={styles.loadMoreText}>{i18n.t('home.loadMore')}</Text>
+            )}
+          </TouchableOpacity>
         )}
       </ScrollView>
 
@@ -428,6 +540,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   chatText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 12,
+  },
+  loadMoreText: {
     fontSize: 14,
     color: '#4CAF50',
     fontWeight: '500',

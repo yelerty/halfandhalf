@@ -26,7 +26,10 @@ service cloud.firestore {
       // 사용자별 채팅 세션 참조
       match /chatSessions/{sessionId} {
         allow read: if isOwner(userId);
-        allow write: if isOwner(userId);
+        // 본인 또는 해당 채팅 세션의 참여자만 쓰기 가능
+        allow write: if isOwner(userId)
+          || (isAuthenticated()
+              && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants);
       }
     }
 
