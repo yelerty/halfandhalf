@@ -88,6 +88,7 @@ export default {
     leaveChatConfirm: '정말 나가시겠습니까?',
     leftChat: '채팅방에서 나갔습니다.',
     sessionNotFound: '채팅 세션이 존재하지 않습니다.',
+    sessionDeleted: '채팅 세션이 삭제되었습니다.',
     postDeleted: '게시글이 삭제되어 채팅을 시작할 수 없습니다.',
     sendError: '메시지 전송에 실패했습니다.',
   },

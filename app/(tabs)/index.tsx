@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, getDocs, setDoc, serverTimestamp, limit, startAfter, runTransaction } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, getDocs, setDoc, serverTimestamp, limit, startAfter } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../../utils/location';
@@ -276,7 +276,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleStartChat = async (post: Post) => {
+  const handleStartChat = (post: Post) => {
     if (!auth.currentUser) {
       Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
       return;
@@ -288,56 +288,25 @@ export default function HomeScreen() {
       return;
     }
 
-    try {
-      const currentUserId = auth.currentUser.uid;
+    const currentUserId = auth.currentUser.uid;
 
-      // 채팅 세션 ID 생성 (일관된 순서 보장)
-      const participants = [currentUserId, post.userId].sort();
-      const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
+    // 채팅 세션 ID 생성 (일관된 순서 보장)
+    const participants = [currentUserId, post.userId].sort();
+    const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
 
-      const sessionDocRef = doc(db, 'chatSessions', sessionId);
-
-      // 트랜잭션으로 채팅 세션 원자적 생성 (race condition 방지)
-      await runTransaction(db, async (transaction) => {
-        const existingSession = await transaction.get(sessionDocRef);
-
-        if (!existingSession.exists()) {
-          transaction.set(sessionDocRef, {
-            postId: post.id,
-            postStore: post.store,
-            postItem: post.item,
-            participants,
-            createdAt: serverTimestamp(),
-            lastMessageAt: serverTimestamp(),
-            lastMessage: '',
-          });
-        }
-      });
-
-      // 내 채팅 세션 참조 생성 (merge로 멱등성 보장, unreadCount 초기화)
-      await setDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionId), {
+    // 세션 생성 없이 바로 채팅 화면으로 이동 (첫 메시지 전송 시 세션 생성)
+    router.push({
+      pathname: `/chat/${sessionId}`,
+      params: {
         postId: post.id,
-        sessionId,
-        active: true,
-        unreadCount: 0,
-        joinedAt: serverTimestamp(),
-      }, { merge: true });
-
-      // 상대방 채팅 세션 참조 생성/업데이트 (merge로 멱등성 보장)
-      // unreadCount를 포함하지 않아 기존 읽지 않은 메시지 수를 보존
-      await setDoc(doc(db, 'users', post.userId, 'chatSessions', sessionId), {
-        postId: post.id,
-        sessionId,
-        active: true,
-        joinedAt: serverTimestamp(),
-      }, { merge: true });
-
-      // sessionId로 라우팅
-      router.push(`/chat/${sessionId}`);
-    } catch (error) {
-      console.error('채팅 시작 오류:', error);
-      Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
-    }
+        postStore: post.store,
+        postItem: post.item,
+        postUserId: post.userId,
+        postUserEmail: post.userEmail,
+        postStartTime: post.startTime,
+        postEndTime: post.endTime,
+      },
+    });
   };
 
   return (

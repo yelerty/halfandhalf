@@ -88,6 +88,7 @@ export default {
     leaveChatConfirm: 'Are you sure you want to leave?',
     leftChat: 'You have left the chat.',
     sessionNotFound: 'Chat session does not exist.',
+    sessionDeleted: 'Chat session has been deleted.',
     postDeleted: 'The post has been deleted and chat cannot be started.',
     sendError: 'Failed to send message.',
   },

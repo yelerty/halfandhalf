@@ -45,39 +45,18 @@ export default function ChatsScreen() {
           // active가 false이거나 없으면 건너뛰기 (나간 채팅방)
           if (sessionData.active === false) continue;
 
-          try {
-            // 채팅 세션 정보 가져오기
-            const chatSessionDoc = await getDoc(doc(db, 'chatSessions', sessionId));
+          // 필수 데이터 확인 (postStore, postItem은 users/chatSessions에 저장됨)
+          if (!sessionData.postStore || !sessionData.postItem) continue;
 
-            if (!isMounted) break;
-
-            // 채팅 세션이 존재하는지 확인
-            if (chatSessionDoc.exists()) {
-              const chatData = chatSessionDoc.data();
-
-              // 본인과의 채팅 세션 필터링
-              const participants = chatData.participants || [];
-              const uniqueParticipants = [...new Set(participants)];
-              if (uniqueParticipants.length === 1) continue;
-
-              // 채팅 세션 추가
-              sessions.push({
-                sessionId,
-                postId: sessionData.postId,
-                postTitle: `${chatData.postStore} - ${chatData.postItem}`,
-                lastMessage: chatData.lastMessage || i18n.t('chats.startChatting'),
-                lastMessageTime: chatData.lastMessageAt,
-                unreadCount: sessionData.unreadCount || 0,
-              });
-            } else {
-              // 채팅 세션이 삭제되었으면 내 참조도 삭제
-              if (auth.currentUser && isMounted) {
-                await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId));
-              }
-            }
-          } catch (error) {
-            console.error('채팅 세션 로드 오류:', error);
-          }
+          // 채팅 세션 추가 (N+1 쿼리 제거, 저장된 데이터 사용)
+          sessions.push({
+            sessionId,
+            postId: sessionData.postId,
+            postTitle: `${sessionData.postStore} - ${sessionData.postItem}`,
+            lastMessage: sessionData.lastMessage || i18n.t('chats.startChatting'),
+            lastMessageTime: sessionData.lastMessageAt,
+            unreadCount: sessionData.unreadCount || 0,
+          });
         }
 
         if (!isMounted) return;

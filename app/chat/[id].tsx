@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import i18n from '../../i18n';
 
@@ -11,19 +11,31 @@ interface Message {
   text: string;
   senderId: string;
   createdAt: any;
+  isTemp?: boolean;
 }
 
 export default function ChatScreen() {
   const params = useLocalSearchParams();
   const sessionIdFromParams = Array.isArray(params.id) ? params.id[0] : params.id;
+
+  // params에서 게시글 정보 추출 (새 채팅인 경우)
+  const postIdFromParams = Array.isArray(params.postId) ? params.postId[0] : params.postId;
+  const postStoreFromParams = Array.isArray(params.postStore) ? params.postStore[0] : params.postStore;
+  const postItemFromParams = Array.isArray(params.postItem) ? params.postItem[0] : params.postItem;
+  const postUserIdFromParams = Array.isArray(params.postUserId) ? params.postUserId[0] : params.postUserId;
+  const postUserEmailFromParams = Array.isArray(params.postUserEmail) ? params.postUserEmail[0] : params.postUserEmail;
+  const postStartTimeFromParams = Array.isArray(params.postStartTime) ? params.postStartTime[0] : params.postStartTime;
+  const postEndTimeFromParams = Array.isArray(params.postEndTime) ? params.postEndTime[0] : params.postEndTime;
+
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [postInfo, setPostInfo] = useState<any>(null);
-  const [chatSessionId, setChatSessionId] = useState<string>('');
+  const [sessionExists, setSessionExists] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const hasMarkedAsReadRef = useRef(false);
 
-  // 채팅 세션 정보 가져오기
+  // 채팅 세션 정보 가져오기 또는 params에서 설정
   useEffect(() => {
     let isMounted = true;
 
@@ -34,54 +46,90 @@ export default function ChatScreen() {
       }
 
       try {
-        if (!isMounted) return;
-        setChatSessionId(sessionIdFromParams);
-
-        // 채팅 세션 정보 가져오기
+        // 먼저 기존 세션이 있는지 확인
         const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
         const sessionDoc = await getDoc(sessionDocRef);
 
         if (!isMounted) return;
 
-        if (!sessionDoc.exists()) {
+        if (sessionDoc.exists()) {
+          // 기존 세션이 있으면 사용
+          setSessionExists(true);
+          const sessionData = sessionDoc.data();
+          const postId = sessionData.postId;
+
+          // 게시글 정보 가져오기
+          const postDoc = await getDoc(doc(db, 'posts', postId));
+
+          if (!isMounted) return;
+
+          if (postDoc.exists()) {
+            const postData = { id: postDoc.id, ...postDoc.data() };
+            setPostInfo(postData);
+
+            // 자신의 채팅 세션 참조 확인 및 생성
+            if (auth.currentUser) {
+              const mySessionRef = doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams);
+              const mySessionDoc = await getDoc(mySessionRef);
+
+              if (!mySessionDoc.exists()) {
+                // 참조가 없으면 생성 (상대방이 진입하는 경우)
+                await setDoc(mySessionRef, {
+                  postId: postId,
+                  sessionId: sessionIdFromParams,
+                  active: true,
+                  unreadCount: 0,
+                  joinedAt: serverTimestamp(),
+                });
+              } else {
+                // 참조가 있으면 읽음 처리
+                await setDoc(mySessionRef, {
+                  unreadCount: 0,
+                  lastReadAt: serverTimestamp(),
+                }, { merge: true });
+              }
+            }
+          } else {
+            // 게시글이 삭제됨
+            if (auth.currentUser) {
+              await deleteDoc(sessionDocRef);
+              await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
+            }
+            Alert.alert(i18n.t('common.confirm'), i18n.t('chat.postDeleted'));
+            router.back();
+          }
+        } else if (postIdFromParams) {
+          // 세션이 없지만 params에서 게시글 정보가 있으면 (새 채팅)
+          setSessionExists(false);
+          setPostInfo({
+            id: postIdFromParams,
+            store: postStoreFromParams,
+            item: postItemFromParams,
+            userId: postUserIdFromParams,
+            userEmail: postUserEmailFromParams,
+            startTime: postStartTimeFromParams,
+            endTime: postEndTimeFromParams,
+          });
+        } else {
+          // 세션도 없고 params도 없으면 에러
           Alert.alert(i18n.t('common.confirm'), i18n.t('chat.sessionNotFound'));
           router.back();
-          return;
         }
-
-        const sessionData = sessionDoc.data();
-        const postId = sessionData.postId;
-
-        // 게시글 정보 가져오기
-        const postDoc = await getDoc(doc(db, 'posts', postId));
-
-        if (!isMounted) return;
-
-        if (postDoc.exists()) {
-          const postData = { id: postDoc.id, ...postDoc.data() };
-          setPostInfo(postData);
-
-          // 읽음 처리 (채팅방 진입 시)
-          if (auth.currentUser) {
-            const mySessionRef = doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams);
-            await setDoc(mySessionRef, {
-              unreadCount: 0,
-              lastReadAt: serverTimestamp(),
-            }, { merge: true });
-          }
-        } else {
-          // 게시글이 삭제되었으면 세션도 정리
-          if (auth.currentUser) {
-            await deleteDoc(sessionDocRef);
-            await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
-          }
-
-          Alert.alert(i18n.t('common.confirm'), i18n.t('chat.postDeleted'));
-          router.back();
-        }
-      } catch (error) {
+      } catch (error: any) {
         console.error('채팅 세션 로드 오류:', error);
-        if (isMounted) {
+        // permission-denied는 세션이 아직 없는 정상 케이스
+        if (error.code === 'permission-denied' && postIdFromParams) {
+          setSessionExists(false);
+          setPostInfo({
+            id: postIdFromParams,
+            store: postStoreFromParams,
+            item: postItemFromParams,
+            userId: postUserIdFromParams,
+            userEmail: postUserEmailFromParams,
+            startTime: postStartTimeFromParams,
+            endTime: postEndTimeFromParams,
+          });
+        } else if (isMounted) {
           Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
         }
       }
@@ -94,12 +142,12 @@ export default function ChatScreen() {
     };
   }, [sessionIdFromParams]);
 
-  // 메시지 실시간 구독 및 읽음 처리
+  // 메시지 실시간 구독 (세션이 존재할 때만)
   useEffect(() => {
-    if (!chatSessionId || !auth.currentUser) return;
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
 
     const currentUserId = auth.currentUser.uid;
-    const messagesCollectionRef = collection(db, 'chatSessions', chatSessionId, 'messages');
+    const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(
@@ -112,23 +160,20 @@ export default function ChatScreen() {
 
         setMessages(messagesData);
 
-        // 채팅방에 있으면 읽음 처리 (최적화: unreadCount가 0이 아닐 때만)
-        try {
-          const mySessionRef = doc(db, 'users', currentUserId, 'chatSessions', chatSessionId);
-          const mySession = await getDoc(mySessionRef);
-
-          // unreadCount가 0보다 크면 읽음 처리 (불필요한 쓰기 방지)
-          if (mySession.exists() && (mySession.data()?.unreadCount || 0) > 0) {
+        // 첫 구독 시에만 읽음 처리 (중복 방지)
+        if (!hasMarkedAsReadRef.current) {
+          try {
+            const mySessionRef = doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams);
             await setDoc(mySessionRef, {
               unreadCount: 0,
               lastReadAt: serverTimestamp(),
             }, { merge: true });
+            hasMarkedAsReadRef.current = true;
+          } catch (error) {
+            console.error('읽음 처리 오류:', error);
           }
-        } catch (error) {
-          console.error('읽음 처리 오류:', error);
         }
 
-        // 새 메시지가 오면 스크롤 맨 아래로
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
@@ -136,65 +181,98 @@ export default function ChatScreen() {
       (error) => {
         console.error('메시지 구독 오류:', error);
         if (error.code === 'permission-denied') {
-          Alert.alert(i18n.t('common.error'), i18n.t('errors.firebaseConfig'));
+          // 세션이 삭제되었거나 권한이 없음
+          Alert.alert(
+            i18n.t('common.confirm'),
+            i18n.t('chat.sessionDeleted') || '채팅 세션이 삭제되었습니다.',
+            [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]
+          );
         }
       }
     );
 
     return () => unsubscribe();
-  }, [chatSessionId]);
+  }, [sessionIdFromParams, sessionExists]);
 
   const handleSend = async () => {
-    if (!message.trim() || !chatSessionId || !postInfo || !auth.currentUser) return;
+    if (!message.trim() || !sessionIdFromParams || !postInfo || !auth.currentUser) return;
 
     const messageText = message.trim();
     const currentUserId = auth.currentUser.uid;
+    const participants = [currentUserId, postInfo.userId].sort();
+
+    // 낙관적 업데이트: 로컬 상태에 임시 메시지 추가
+    const tempMessageId = 'temp-' + Date.now();
+    const tempMessage: Message = {
+      id: tempMessageId,
+      text: messageText,
+      senderId: currentUserId,
+      createdAt: new Date(),
+      isTemp: true,
+    };
+    setMessages(prev => [...prev, tempMessage]);
+    setMessage(''); // 입력창 즉시 초기화
 
     try {
-      // 0. 채팅 세션이 여전히 존재하는지 확인 (게시글 삭제 등으로 세션이 사라질 수 있음)
-      const sessionDoc = await getDoc(doc(db, 'chatSessions', chatSessionId));
-      if (!sessionDoc.exists()) {
-        Alert.alert(i18n.t('common.error'), i18n.t('chat.sessionNotFound'));
-        router.back();
-        return;
+      // 세션이 없으면 먼저 생성
+      if (!sessionExists) {
+        // 1. 채팅 세션 생성
+        await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
+          postId: postInfo.id,
+          postStore: postInfo.store,
+          postItem: postInfo.item,
+          participants,
+          createdAt: serverTimestamp(),
+          lastMessageAt: serverTimestamp(),
+          lastMessage: messageText,
+        });
+
+        // 2. 내 채팅 세션 참조 생성
+        await setDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams), {
+          postId: postInfo.id,
+          postStore: postInfo.store,
+          postItem: postInfo.item,
+          sessionId: sessionIdFromParams,
+          active: true,
+          unreadCount: 0,
+          joinedAt: serverTimestamp(),
+        });
+
+        // 3. 상대방 채팅 세션 참조도 생성 (merge로 안전하게)
+        await setDoc(doc(db, 'users', postInfo.userId, 'chatSessions', sessionIdFromParams), {
+          postId: postInfo.id,
+          postStore: postInfo.store,
+          postItem: postInfo.item,
+          sessionId: sessionIdFromParams,
+          active: true,
+          unreadCount: 1,
+          joinedAt: serverTimestamp(),
+        }, { merge: true });
+
+        setSessionExists(true);
+      } else {
+        // 세션이 있으면 lastMessage 업데이트
+        await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
+          lastMessageAt: serverTimestamp(),
+          lastMessage: messageText,
+        }, { merge: true });
       }
 
-      // 1. 메시지 저장
-      const messagesCollectionRef = collection(db, 'chatSessions', chatSessionId, 'messages');
+      // 메시지 저장
+      const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
       await addDoc(messagesCollectionRef, {
         text: messageText,
         senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
 
-      // 2. 세션의 lastMessage 업데이트
-      await setDoc(doc(db, 'chatSessions', chatSessionId), {
-        lastMessageAt: serverTimestamp(),
-        lastMessage: messageText,
-      }, { merge: true });
-
-      // 3. 상대방의 unreadCount 증가 (active인 경우에만)
-      const participants = sessionDoc.data()?.participants || [];
-      const otherUserId = participants.find((id: string) => id !== currentUserId);
-
-      if (otherUserId) {
-        const otherUserSessionRef = doc(db, 'users', otherUserId, 'chatSessions', chatSessionId);
-        const otherUserSession = await getDoc(otherUserSessionRef);
-
-        // 상대방이 채팅방에 참여 중이고 active 상태일 때만 unreadCount 증가
-        if (otherUserSession.exists() && otherUserSession.data()?.active !== false) {
-          const currentUnreadCount = otherUserSession.data()?.unreadCount || 0;
-          await setDoc(otherUserSessionRef, {
-            unreadCount: currentUnreadCount + 1,
-          }, { merge: true });
-        }
-      }
-
-      setMessage('');
+      // 구독을 통해 실제 메시지를 받으면 임시 메시지는 자동으로 대체됨
     } catch (error: any) {
       console.error('메시지 전송 오류:', error);
 
-      // 구체적인 오류 메시지 제공
+      // 에러 발생 시 임시 메시지 제거
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
+
       let errorMessage = i18n.t('chat.sendError');
       if (error.code === 'permission-denied') {
         errorMessage = i18n.t('errors.firebaseConfig');
@@ -203,15 +281,18 @@ export default function ChatScreen() {
       }
 
       Alert.alert(i18n.t('common.error'), errorMessage);
-
-      // 메시지 전송 실패 시 입력창 복구 (재시도 가능하도록)
-      // setMessage는 비우지 않음
     }
   };
 
   const handleLeaveChat = () => {
-    if (!chatSessionId || !postInfo || !auth.currentUser) {
-      Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
+    if (!sessionIdFromParams || !postInfo || !auth.currentUser) {
+      router.back();
+      return;
+    }
+
+    // 세션이 없으면 그냥 뒤로가기
+    if (!sessionExists) {
+      router.back();
       return;
     }
 
@@ -227,38 +308,32 @@ export default function ChatScreen() {
             if (!auth.currentUser) return;
 
             try {
-              // 내 채팅 세션 참조를 비활성화로 표시
-              await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', chatSessionId), {
+              await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams), {
                 active: false,
                 leftAt: serverTimestamp(),
               }, { merge: true });
 
-              // 상대방 ID 찾기
               const participants = [auth.currentUser.uid, postInfo.userId];
               const otherUserId = participants.find(id => id !== auth.currentUser?.uid);
 
               if (otherUserId) {
                 const otherUserSessionDoc = await getDoc(
-                  doc(db, 'users', otherUserId, 'chatSessions', chatSessionId)
+                  doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams)
                 );
 
-                // 둘 다 나갔으면 채팅 세션 전체 삭제
                 if (!otherUserSessionDoc.exists() || otherUserSessionDoc.data()?.active === false) {
-                  // 메시지 모두 삭제
                   const messagesSnapshot = await getDocs(
-                    collection(db, 'chatSessions', chatSessionId, 'messages')
+                    collection(db, 'chatSessions', sessionIdFromParams, 'messages')
                   );
                   const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
                   await Promise.all(deletePromises);
 
-                  // 세션 삭제
-                  await deleteDoc(doc(db, 'chatSessions', chatSessionId));
+                  await deleteDoc(doc(db, 'chatSessions', sessionIdFromParams));
 
-                  // 양쪽 사용자의 채팅 세션 참조도 삭제
                   if (auth.currentUser) {
-                    await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', chatSessionId));
+                    await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
                   }
-                  await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', chatSessionId));
+                  await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
                 }
               }
 
@@ -278,7 +353,7 @@ export default function ChatScreen() {
     <>
       <Stack.Screen
         options={{
-          title: postInfo ? `${postInfo.store} - ${postInfo.item}` : '채팅',
+          title: postInfo ? `${postInfo.store} - ${postInfo.item}` : i18n.t('chat.title'),
           headerRight: () => (
             <TouchableOpacity onPress={handleLeaveChat} style={{ marginRight: 10 }}>
               <Ionicons name="exit-outline" size={24} color="#ff5252" />
@@ -291,7 +366,6 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={90}
       >
-        {/* 게시글 정보 */}
         {postInfo && (
           <View style={styles.postInfo}>
             <Ionicons name="cart" size={16} color="#666" />
@@ -301,45 +375,45 @@ export default function ChatScreen() {
           </View>
         )}
 
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.messages}
-        contentContainerStyle={styles.messagesContent}
-      >
-        {messages.length === 0 ? (
-          <Text style={styles.emptyText}>{i18n.t('chat.emptyMessage')}</Text>
-        ) : (
-          messages.map((msg) => (
-            <View
-              key={msg.id}
-              style={msg.senderId === auth.currentUser?.uid ? styles.messageSelf : styles.messageOther}
-            >
-              <Text style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}>
-                {msg.text}
-              </Text>
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder={i18n.t('chat.sendPlaceholder')}
-          value={message}
-          onChangeText={setMessage}
-          multiline
-          maxLength={500}
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!message.trim()}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messages}
+          contentContainerStyle={styles.messagesContent}
         >
-          <Ionicons name="send" size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          {messages.length === 0 ? (
+            <Text style={styles.emptyText}>{i18n.t('chat.emptyMessage')}</Text>
+          ) : (
+            messages.map((msg) => (
+              <View
+                key={msg.id}
+                style={msg.senderId === auth.currentUser?.uid ? styles.messageSelf : styles.messageOther}
+              >
+                <Text style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}>
+                  {msg.text}
+                </Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder={i18n.t('chat.sendPlaceholder')}
+            value={message}
+            onChangeText={setMessage}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!message.trim()}
+          >
+            <Ionicons name="send" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -400,6 +474,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
+    paddingBottom: 30,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#ddd',

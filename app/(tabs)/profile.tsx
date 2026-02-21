@@ -1,15 +1,21 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import i18n from '../../i18n';
 
+interface BlacklistedUser {
+  userId: string;
+  email: string;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
-  const [blacklist, setBlacklist] = useState<string[]>([]);
+  const [blacklistedUsers, setBlacklistedUsers] = useState<BlacklistedUser[]>([]);
+  const [loadingEmails, setLoadingEmails] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -19,11 +25,49 @@ export default function ProfileScreen() {
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
     const unsubscribe = onSnapshot(
       userDocRef,
-      (docSnapshot) => {
+      async (docSnapshot) => {
         if (!isMounted) return;
 
         if (docSnapshot.exists()) {
-          setBlacklist(docSnapshot.data()?.blacklist || []);
+          const blacklistIds = docSnapshot.data()?.blacklist || [];
+
+          if (blacklistIds.length === 0) {
+            setBlacklistedUsers([]);
+            return;
+          }
+
+          // 각 블랙리스트 사용자의 이메일 조회
+          setLoadingEmails(true);
+          const users: BlacklistedUser[] = [];
+
+          for (const userId of blacklistIds) {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', userId));
+              if (userDoc.exists()) {
+                users.push({
+                  userId,
+                  email: userDoc.data()?.email || 'Unknown User',
+                });
+              } else {
+                // 사용자가 삭제된 경우
+                users.push({
+                  userId,
+                  email: 'Deleted User',
+                });
+              }
+            } catch (error) {
+              console.error(`블랙리스트 사용자 ${userId} 조회 오류:`, error);
+              users.push({
+                userId,
+                email: 'Error loading email',
+              });
+            }
+          }
+
+          if (isMounted) {
+            setBlacklistedUsers(users);
+            setLoadingEmails(false);
+          }
         }
       },
       (error) => {
@@ -57,7 +101,8 @@ export default function ProfileScreen() {
     try {
       const currentUserId = auth.currentUser.uid;
       const userDocRef = doc(db, 'users', currentUserId);
-      const updatedBlacklist = blacklist.filter(id => id !== userId);
+      const currentBlacklist = blacklistedUsers.map(u => u.userId);
+      const updatedBlacklist = currentBlacklist.filter(id => id !== userId);
 
       await setDoc(userDocRef, {
         blacklist: updatedBlacklist
@@ -76,14 +121,19 @@ export default function ProfileScreen() {
 
       <ScrollView style={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{i18n.t('profile.blacklist')} ({blacklist.length})</Text>
-          {blacklist.length === 0 ? (
+          <Text style={styles.sectionTitle}>{i18n.t('profile.blacklist')} ({blacklistedUsers.length})</Text>
+          {blacklistedUsers.length === 0 ? (
             <Text style={styles.emptyText}>{i18n.t('profile.noBlacklistedUsers')}</Text>
+          ) : loadingEmails ? (
+            <ActivityIndicator size="small" color="#4CAF50" style={{ marginVertical: 12 }} />
           ) : (
-            blacklist.map((userId) => (
-              <View key={userId} style={styles.blacklistItem}>
-                <Text style={styles.blacklistText}>사용자 ID: {userId.substring(0, 8)}...</Text>
-                <TouchableOpacity onPress={() => handleRemoveFromBlacklist(userId)}>
+            blacklistedUsers.map((user) => (
+              <View key={user.userId} style={styles.blacklistItem}>
+                <View style={styles.userInfo}>
+                  <Text style={styles.blacklistEmail}>{user.email}</Text>
+                  <Text style={styles.blacklistUserId}>{user.userId.substring(0, 8)}...</Text>
+                </View>
+                <TouchableOpacity onPress={() => handleRemoveFromBlacklist(user.userId)}>
                   <Ionicons name="trash" size={20} color="#ff5252" />
                 </TouchableOpacity>
               </View>
@@ -146,6 +196,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  blacklistEmail: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  blacklistUserId: {
+    fontSize: 12,
+    color: '#999',
   },
   blacklistText: {
     fontSize: 14,

@@ -2,7 +2,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvo
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import i18n from '../i18n';
 
 export default function LoginScreen() {
@@ -15,9 +16,32 @@ export default function LoginScreen() {
     try {
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, password);
+        // 신규 사용자 문서 초기화
+        if (auth.currentUser) {
+          await setDoc(doc(db, 'users', auth.currentUser.uid), {
+            email: email,
+            createdAt: new Date().toISOString(),
+            blacklist: [],
+          }, { merge: true });
+        }
         Alert.alert(i18n.t('common.success'), i18n.t('auth.registerSuccess'));
       } else {
         await signInWithEmailAndPassword(auth, email, password);
+        // 기존 사용자 문서 확인 및 생성 (마이그레이션용)
+        if (auth.currentUser) {
+          const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+          if (!userDoc.exists()) {
+            await setDoc(doc(db, 'users', auth.currentUser.uid), {
+              email: email,
+              blacklist: [],
+            }, { merge: true });
+          } else if (!userDoc.data()?.email) {
+            // 기존 데이터에 email 추가
+            await setDoc(doc(db, 'users', auth.currentUser.uid), {
+              email: email,
+            }, { merge: true });
+          }
+        }
       }
       router.replace('/(tabs)');
     } catch (error: any) {

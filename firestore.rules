@@ -24,12 +24,15 @@ service cloud.firestore {
       allow write: if isOwner(userId);
 
       // 사용자별 채팅 세션 참조
+      // 본인만 읽기 가능, 채팅 참여자는 업데이트 가능
       match /chatSessions/{sessionId} {
         allow read: if isOwner(userId);
-        // 본인 또는 해당 채팅 세션의 참여자만 쓰기 가능
-        allow write: if isOwner(userId)
-          || (isAuthenticated()
-              && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants);
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId) ||
+                         (isAuthenticated() &&
+                          exists(/databases/$(database)/documents/chatSessions/$(sessionId)) &&
+                          request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants);
+        allow delete: if isOwner(userId);
       }
     }
 
@@ -77,8 +80,10 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
 
-        // 메시지 수정/삭제 금지 (채팅 메시지는 불변)
-        allow update, delete: if false;
+        // 메시지 수정 금지, 삭제는 참여자만 가능
+        allow update: if false;
+        allow delete: if isAuthenticated()
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants;
       }
     }
 
