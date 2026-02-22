@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 16,
     paddingBottom: 80,
     flexGrow: 1,
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     alignSelf: 'flex-start',
-    maxWidth: '85%',
+    maxWidth: '75%',
     flexShrink: 1,
   },
   messageSelfContainer: {
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     alignSelf: 'flex-end',
-    maxWidth: '85%',
+    maxWidth: '75%',
     flexShrink: 1,
   },
   messageText: {
