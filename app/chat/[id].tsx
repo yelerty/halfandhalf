@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 80,
     flexGrow: 1,
   },
   emptyText: {
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     alignSelf: 'flex-end',
-    maxWidth: '80%',
+    maxWidth: '85%',
   },
   messageText: {
     fontSize: 16,
