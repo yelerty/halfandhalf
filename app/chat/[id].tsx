@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -503,6 +503,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     flexWrap: 'wrap',
     width: '100%',
+    ...Platform.select({
+      android: {
+        includeFontPadding: false,
+        marginRight: 4,
+      },
+      ios: {},
+    }),
   },
   messageTextSelf: {
     fontSize: 16,
@@ -510,6 +517,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     flexWrap: 'wrap',
     width: '100%',
+    ...Platform.select({
+      android: {
+        includeFontPadding: false,
+        marginLeft: 4,
+      },
+      ios: {},
+    }),
   },
   inputContainer: {
     flexDirection: 'row',
