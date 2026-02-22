@@ -277,7 +277,7 @@ export default function MyPostsScreen() {
           onPress={() => setShowArchived(false)}
         >
           <Text style={[styles.tabText, !showArchived && styles.tabTextActive]}>
-            {i18n.t('myPosts.activePosts')}
+            {i18n.t('myPosts.activePosts')} ({posts.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
