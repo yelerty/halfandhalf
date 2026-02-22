@@ -198,6 +198,12 @@ export default function MyPostsScreen() {
 
   const handleRepost = async (archivedPost: Post) => {
     try {
+      // 로그인 확인
+      if (!auth.currentUser) {
+        Alert.alert(i18n.t('common.error'), '로그인이 필요합니다');
+        return;
+      }
+
       // 위치 정보 가져오기
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -205,7 +211,18 @@ export default function MyPostsScreen() {
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({});
+      let location = null;
+      try {
+        const loc = await Location.getCurrentPositionAsync({});
+        location = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        };
+      } catch (locError) {
+        console.error('위치 정보 가져오기 오류:', locError);
+        Alert.alert(i18n.t('common.error'), i18n.t('createPost.locationRequired'));
+        return;
+      }
 
       // 현재 시간 기준으로 시간 설정
       const now = new Date();
@@ -214,24 +231,22 @@ export default function MyPostsScreen() {
 
       // 임시 게시글 생성 (수정 화면으로 이동하기 위해)
       const tempPostRef = await addDoc(collection(db, 'posts'), {
-        store: archivedPost.store,
-        item: archivedPost.item,
+        store: archivedPost.store || '',
+        item: archivedPost.item || '',
         date: formatDate(now),
         startTime: formatTime(startDate),
         endTime: formatTime(endDate),
-        userId: auth.currentUser?.uid,
-        userEmail: auth.currentUser?.email,
-        location: {
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        },
+        userId: auth.currentUser.uid,
+        userEmail: auth.currentUser.email || '',
+        location: location,
         createdAt: serverTimestamp(),
       });
 
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
     } catch (error: any) {
-      Alert.alert(i18n.t('common.error'), error.message);
+      console.error('재등록 오류:', error);
+      Alert.alert(i18n.t('common.error'), error.message || '게시글 재등록 실패');
     }
   };
 
