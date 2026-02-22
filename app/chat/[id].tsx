@@ -197,7 +197,7 @@ export default function ChatScreen() {
   const handleSend = async () => {
     if (!message.trim() || !sessionIdFromParams || !postInfo || !auth.currentUser) return;
 
-    const messageText = message.trim();
+    const messageText = message; // trim() 제거 - 공백 보존
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, postInfo.userId].sort();
 
@@ -388,7 +388,10 @@ export default function ChatScreen() {
                 key={msg.id}
                 style={msg.senderId === auth.currentUser?.uid ? styles.messageSelf : styles.messageOther}
               >
-                <Text style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}>
+                <Text
+                  style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}
+                  numberOfLines={0}
+                >
                   {msg.text}
                 </Text>
               </View>
@@ -403,7 +406,7 @@ export default function ChatScreen() {
             value={message}
             onChangeText={setMessage}
             multiline
-            maxLength={500}
+            maxLength={2000}
           />
           <TouchableOpacity
             style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
@@ -452,16 +455,18 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '80%',
+    maxWidth: '85%',
     alignSelf: 'flex-start',
+    flexShrink: 1,
   },
   messageSelf: {
     backgroundColor: '#4CAF50',
     padding: 12,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '80%',
+    maxWidth: '85%',
     alignSelf: 'flex-end',
+    flexShrink: 1,
   },
   messageText: {
     fontSize: 16,
