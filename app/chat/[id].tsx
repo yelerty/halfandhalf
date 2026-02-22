@@ -469,6 +469,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 80,
     flexGrow: 1,
+    width: '100%',
   },
   emptyText: {
     textAlign: 'center',
@@ -484,6 +485,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignSelf: 'flex-start',
     maxWidth: '90%',
+    flexShrink: 1,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -493,6 +495,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignSelf: 'flex-end',
     maxWidth: '90%',
+    flexShrink: 1,
   },
   messageText: {
     fontSize: 16,
