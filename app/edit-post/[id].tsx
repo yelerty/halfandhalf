@@ -11,7 +11,10 @@ import i18n from '../../i18n';
 
 export default function EditPostScreen() {
   const router = useRouter();
-  const { id, repost, archivedId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const repost = Array.isArray(params.repost) ? params.repost[0] : params.repost;
+  const archivedId = Array.isArray(params.archivedId) ? params.archivedId[0] : params.archivedId;
   const isRepostMode = repost === 'true';
   const [store, setStore] = useState('');
   const [item, setItem] = useState('');
@@ -24,10 +27,18 @@ export default function EditPostScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadPost();
+    if (id) {
+      loadPost();
+    }
   }, [id]);
 
   const loadPost = async () => {
+    if (!id) {
+      Alert.alert(i18n.t('common.error'), 'Invalid post ID');
+      router.back();
+      return;
+    }
+
     if (!auth.currentUser) {
       Alert.alert(i18n.t('common.error'), '로그인이 필요합니다');
       router.back();
@@ -35,24 +46,37 @@ export default function EditPostScreen() {
     }
 
     try {
-      const postDoc = await getDoc(doc(db, 'posts', id as string));
+      const postDoc = await getDoc(doc(db, 'posts', id));
       if (postDoc.exists()) {
         const data = postDoc.data();
-        setStore(data.store);
-        setItem(data.item);
+        setStore(data.store || '');
+        setItem(data.item || '');
         if (data.date) {
           setDate(parseDate(data.date));
         }
-        setStartTime(parseTime(data.startTime));
-        setEndTime(parseTime(data.endTime));
+        if (data.startTime) {
+          setStartTime(parseTime(data.startTime));
+        }
+        if (data.endTime) {
+          setEndTime(parseTime(data.endTime));
+        }
+      } else {
+        Alert.alert(i18n.t('common.error'), '게시글을 찾을 수 없습니다');
+        router.back();
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('게시글 로드 오류:', error);
       Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
       router.back();
     }
   };
 
   const handleUpdate = async () => {
+    if (!id) {
+      Alert.alert(i18n.t('common.error'), 'Invalid post ID');
+      return;
+    }
+
     if (!store || !item) {
       Alert.alert(i18n.t('common.error'), i18n.t('createPost.fillAllFields'));
       return;
@@ -60,7 +84,9 @@ export default function EditPostScreen() {
 
     try {
       setLoading(true);
-      await updateDoc(doc(db, 'posts', id as string), {
+
+      // 게시글 업데이트
+      await updateDoc(doc(db, 'posts', id), {
         store,
         item,
         date: formatDate(date),
@@ -69,30 +95,37 @@ export default function EditPostScreen() {
       });
 
       // 재등록 모드인 경우 보관함에서 삭제
-      if (isRepostMode && archivedId) {
+      if (isRepostMode && archivedId && auth.currentUser) {
         try {
-          const key = `@expired_posts_${auth.currentUser?.uid}`;
+          const key = `@expired_posts_${auth.currentUser.uid}`;
           const existing = await AsyncStorage.getItem(key);
           if (existing) {
             const archived = JSON.parse(existing);
             const filtered = archived.filter((p: any) => p.id !== archivedId);
             await AsyncStorage.setItem(key, JSON.stringify(filtered));
           }
-        } catch (error) {
-          console.error('보관함 삭제 오류:', error);
+        } catch (archiveError) {
+          console.error('보관함 삭제 오류:', archiveError);
+          // 보관함 삭제 실패는 게시글 업데이트가 성공했으므로 계속 진행
         }
       }
 
       Alert.alert(i18n.t('common.success'), isRepostMode ? i18n.t('editPost.repostSuccess') : i18n.t('editPost.updateSuccess'));
       router.back();
     } catch (error: any) {
-      Alert.alert(i18n.t('common.error'), error.message);
+      console.error('게시글 업데이트 오류:', error);
+      Alert.alert(i18n.t('common.error'), error.message || '게시글 업데이트 실패');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = () => {
+    if (!id) {
+      Alert.alert(i18n.t('common.error'), 'Invalid post ID');
+      return;
+    }
+
     Alert.alert(
       i18n.t('editPost.deletePost'),
       i18n.t('editPost.deleteConfirm'),
@@ -103,16 +136,20 @@ export default function EditPostScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setLoading(true);
               // 1. 관련 채팅 세션 삭제
-              await deleteChatSessionsForPost(id as string);
+              await deleteChatSessionsForPost(id);
 
               // 2. 게시글 삭제
-              await deleteDoc(doc(db, 'posts', id as string));
+              await deleteDoc(doc(db, 'posts', id));
 
               Alert.alert(i18n.t('common.success'), i18n.t('editPost.deleteSuccess'));
               router.back();
             } catch (error: any) {
-              Alert.alert(i18n.t('common.error'), error.message);
+              console.error('게시글 삭제 오류:', error);
+              Alert.alert(i18n.t('common.error'), error.message || '게시글 삭제 실패');
+            } finally {
+              setLoading(false);
             }
           },
         },
