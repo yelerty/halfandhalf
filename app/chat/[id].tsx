@@ -485,6 +485,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     maxWidth: '75%',
     alignSelf: 'flex-start',
+    overflow: 'hidden',
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -494,18 +495,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     maxWidth: '75%',
     alignSelf: 'flex-end',
+    overflow: 'hidden',
   },
   messageText: {
     fontSize: 16,
     color: '#333',
     lineHeight: 22,
     flexWrap: 'wrap',
+    width: '100%',
   },
   messageTextSelf: {
     fontSize: 16,
     color: 'white',
     lineHeight: 22,
     flexWrap: 'wrap',
+    width: '100%',
   },
   inputContainer: {
     flexDirection: 'row',
