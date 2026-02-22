@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     alignSelf: 'flex-start',
-    maxWidth: '90%',
+    maxWidth: '85%',
     flexShrink: 1,
   },
   messageSelfContainer: {
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     alignSelf: 'flex-end',
-    maxWidth: '90%',
+    maxWidth: '85%',
     flexShrink: 1,
   },
   messageText: {
@@ -502,12 +502,14 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 22,
     flexWrap: 'wrap',
+    flex: 1,
   },
   messageTextSelf: {
     fontSize: 16,
     color: 'white',
     lineHeight: 22,
     flexWrap: 'wrap',
+    flex: 1,
   },
   inputContainer: {
     flexDirection: 'row',
