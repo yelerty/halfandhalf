@@ -386,7 +386,7 @@ export default function ChatScreen() {
             messages.map((msg) => (
               <View
                 key={msg.id}
-                style={msg.senderId === auth.currentUser?.uid ? styles.messageSelf : styles.messageOther}
+                style={msg.senderId === auth.currentUser?.uid ? styles.messageSelfContainer : styles.messageOtherContainer}
               >
                 <Text
                   style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}
@@ -442,7 +442,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   emptyText: {
     textAlign: 'center',
@@ -450,31 +453,33 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 14,
   },
-  messageOther: {
+  messageOtherContainer: {
     backgroundColor: 'white',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '85%',
     alignSelf: 'flex-start',
-    flexShrink: 1,
+    maxWidth: '80%',
   },
-  messageSelf: {
+  messageSelfContainer: {
     backgroundColor: '#4CAF50',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '85%',
     alignSelf: 'flex-end',
-    flexShrink: 1,
+    maxWidth: '80%',
   },
   messageText: {
     fontSize: 16,
     color: '#333',
+    lineHeight: 22,
   },
   messageTextSelf: {
     fontSize: 16,
     color: 'white',
+    lineHeight: 22,
   },
   inputContainer: {
     flexDirection: 'row',
