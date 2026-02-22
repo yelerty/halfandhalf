@@ -158,6 +158,11 @@ export default function ChatScreen() {
           ...doc.data()
         })) as Message[];
 
+        // 메시지 렌더링 디버깅
+        messagesData.forEach((msg, index) => {
+          console.log(`[메시지 #${index + 1}] 발신자: ${msg.senderId === auth.currentUser?.uid ? '나' : '상대'}, 길이: ${msg.text?.length || 0}, 내용: "${msg.text}"`);
+        });
+
         setMessages(messagesData);
 
         // 첫 구독 시에만 읽음 처리 (중복 방지)
@@ -398,19 +403,22 @@ export default function ChatScreen() {
           {messages.length === 0 ? (
             <Text style={styles.emptyText}>{i18n.t('chat.emptyMessage')}</Text>
           ) : (
-            messages.map((msg) => (
-              <View
-                key={msg.id}
-                style={msg.senderId === auth.currentUser?.uid ? styles.messageSelfContainer : styles.messageOtherContainer}
-              >
-                <Text
-                  style={msg.senderId === auth.currentUser?.uid ? styles.messageTextSelf : styles.messageText}
-                  numberOfLines={0}
+            messages.map((msg, index) => {
+              const isSelf = msg.senderId === auth.currentUser?.uid;
+              return (
+                <View
+                  key={msg.id}
+                  style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
                 >
-                  {msg.text}
-                </Text>
-              </View>
-            ))
+                  <Text
+                    style={isSelf ? styles.messageTextSelf : styles.messageText}
+                    numberOfLines={0}
+                  >
+                    {msg.text}
+                  </Text>
+                </View>
+              );
+            })
           )}
         </ScrollView>
 
