@@ -195,9 +195,21 @@ export default function ChatScreen() {
   }, [sessionIdFromParams, sessionExists]);
 
   const handleSend = async () => {
-    if (!message.trim() || !sessionIdFromParams || !postInfo || !auth.currentUser) return;
+    // 메시지 유효성 체크 (공백은 허용하되, 완전히 비어있으면 거부)
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || !sessionIdFromParams || !postInfo || !auth.currentUser) return;
 
-    const messageText = message; // trim() 제거 - 공백 보존
+    // 원본 메시지 사용 (공백 포함)
+    const messageText = message;
+
+    // 디버깅: 실제 저장되는 메시지 확인
+    console.log(`[메시지 전송] 길이: ${messageText.length}, 내용: "${messageText}"`);
+
+    if (!messageText || messageText.length === 0) {
+      Alert.alert(i18n.t('common.error'), '메시지가 비어있습니다.');
+      return;
+    }
+
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, postInfo.userId].sort();
 
@@ -260,11 +272,14 @@ export default function ChatScreen() {
 
       // 메시지 저장
       const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
-      await addDoc(messagesCollectionRef, {
+      const docRef = await addDoc(messagesCollectionRef, {
         text: messageText,
         senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
+
+      // 저장 확인
+      console.log(`[메시지 저장됨] ID: ${docRef.id}, 길이: ${messageText.length}`);
 
       // 구독을 통해 실제 메시지를 받으면 임시 메시지는 자동으로 대체됨
     } catch (error: any) {
@@ -495,10 +510,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     marginRight: 8,
     fontSize: 16,
-    maxHeight: 100,
+    maxHeight: 120,
+    minHeight: 44,
+    textAlignVertical: 'top',
   },
   sendButton: {
     width: 40,
