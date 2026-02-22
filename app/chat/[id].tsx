@@ -408,14 +408,16 @@ export default function ChatScreen() {
               return (
                 <View
                   key={msg.id}
-                  style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
+                  style={{ width: '100%', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}
                 >
-                  <Text
-                    style={isSelf ? styles.messageTextSelf : styles.messageText}
-                    numberOfLines={0}
-                  >
-                    {msg.text}
-                  </Text>
+                  <View style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}>
+                    <Text
+                      style={isSelf ? styles.messageTextSelf : styles.messageText}
+                      numberOfLines={0}
+                    >
+                      {msg.text}
+                    </Text>
+                  </View>
                 </View>
               );
             })
@@ -483,9 +485,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    alignSelf: 'flex-start',
     maxWidth: '75%',
-    flexShrink: 1,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -493,23 +493,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    alignSelf: 'flex-end',
     maxWidth: '75%',
-    flexShrink: 1,
   },
   messageText: {
     fontSize: 16,
     color: '#333',
     lineHeight: 22,
     flexWrap: 'wrap',
-    flex: 1,
   },
   messageTextSelf: {
     fontSize: 16,
     color: 'white',
     lineHeight: 22,
     flexWrap: 'wrap',
-    flex: 1,
   },
   inputContainer: {
     flexDirection: 'row',
