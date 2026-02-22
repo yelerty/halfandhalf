@@ -413,6 +413,7 @@ export default function ChatScreen() {
                   <Text
                     style={isSelf ? styles.messageTextSelf : styles.messageText}
                     numberOfLines={0}
+                    allowFontScaling={false}
                   >
                     {msg.text}
                   </Text>
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '75%',
+    maxWidth: Platform.OS === 'android' ? '70%' : '75%',
     alignSelf: 'flex-start',
     overflow: 'hidden',
   },
@@ -493,14 +494,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: '75%',
+    maxWidth: Platform.OS === 'android' ? '70%' : '75%',
     alignSelf: 'flex-end',
     overflow: 'hidden',
   },
   messageText: {
     fontSize: 16,
     color: '#333',
-    lineHeight: 22,
+    lineHeight: Platform.OS === 'android' ? 20 : 22,
     flexWrap: 'wrap',
     width: '100%',
     ...Platform.select({
@@ -514,7 +515,7 @@ const styles = StyleSheet.create({
   messageTextSelf: {
     fontSize: 16,
     color: 'white',
-    lineHeight: 22,
+    lineHeight: Platform.OS === 'android' ? 20 : 22,
     flexWrap: 'wrap',
     width: '100%',
     ...Platform.select({
