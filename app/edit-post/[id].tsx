@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../config/firebase';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +32,33 @@ export default function EditPostScreen() {
       loadPost();
     }
   }, [id]);
+
+  const handleBackPress = () => {
+    if (isRepostMode) {
+      Alert.alert(
+        '게시글 재등록 취소',
+        '수정하지 않고 돌아가면 임시 게시글이 삭제됩니다.',
+        [
+          { text: '계속 수정', style: 'cancel' },
+          {
+            text: '삭제하고 돌아가기',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteDoc(doc(db, 'posts', id));
+                router.back();
+              } catch (error) {
+                console.error('임시 게시글 삭제 오류:', error);
+                router.back();
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      router.back();
+    }
+  };
 
   const loadPost = async () => {
     if (!id) {
@@ -158,7 +186,18 @@ export default function EditPostScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <>
+      <Stack.Screen
+        options={{
+          title: isRepostMode ? '게시글 재등록' : '게시글 수정',
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleBackPress} style={{ marginLeft: 10 }}>
+              <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <ScrollView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.label}>{i18n.t('createPost.store')}</Text>
         <TextInput
@@ -262,6 +301,7 @@ export default function EditPostScreen() {
         )}
       </View>
     </ScrollView>
+    </>
   );
 }
 
