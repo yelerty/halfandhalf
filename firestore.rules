@@ -24,7 +24,7 @@ service cloud.firestore {
       allow write: if isOwner(userId);
 
       // 사용자별 채팅 세션 참조
-      // 본인만 읽기 가능, 채팅 참여자는 업데이트 가능
+      // 본인만 읽기 가능, 채팅 참여자는 업데이트/삭제 가능
       match /chatSessions/{sessionId} {
         allow read: if isOwner(userId);
         allow create: if isOwner(userId);
@@ -32,7 +32,10 @@ service cloud.firestore {
                          (isAuthenticated() &&
                           exists(/databases/$(database)/documents/chatSessions/$(sessionId)) &&
                           request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants);
-        allow delete: if isOwner(userId);
+        allow delete: if isOwner(userId) ||
+                         (isAuthenticated() &&
+                          exists(/databases/$(database)/documents/chatSessions/$(sessionId)) &&
+                          request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants);
       }
     }
 

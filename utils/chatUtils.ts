@@ -31,6 +31,7 @@ const deleteBatchInChunks = async (docRefs: DocumentReference[]) => {
 
 /**
  * 게시글 삭제 시 관련된 모든 채팅 세션과 메시지를 삭제합니다.
+ * 양쪽 참여자 모두에게서 채팅 세션이 삭제됩니다.
  * Firestore batch 500개 제한을 고려하여 여러 batch로 나눠 처리합니다.
  */
 export const deleteChatSessionsForPost = async (postId: string) => {
@@ -43,11 +44,13 @@ export const deleteChatSessionsForPost = async (postId: string) => {
     const chatSessionsSnapshot = await getDocs(chatSessionsQuery);
 
     if (chatSessionsSnapshot.empty) {
-      return; // 채팅 세션이 없으면 종료
+      console.log(`게시글 ${postId}과 관련된 채팅 세션이 없습니다.`);
+      return;
     }
 
     const docsToDelete: DocumentReference[] = [];
     const sessionIds: string[] = [];
+    const participantCount = new Map<string, number>();
 
     // 2. 삭제할 문서 참조 수집
     for (const sessionDoc of chatSessionsSnapshot.docs) {
@@ -68,15 +71,12 @@ export const deleteChatSessionsForPost = async (postId: string) => {
       // 채팅 세션 삭제
       docsToDelete.push(sessionDoc.ref);
 
-      // 사용자들의 chatSessions 참조 삭제
-      if (sessionData?.participants) {
+      // 양쪽 참여자의 chatSessions 참조 삭제 (반드시 양쪽 모두)
+      if (sessionData?.participants && Array.isArray(sessionData.participants)) {
         for (const userId of sessionData.participants) {
-          try {
-            const userChatSessionRef = doc(db, 'users', userId, 'chatSessions', sessionId);
-            docsToDelete.push(userChatSessionRef);
-          } catch (error) {
-            console.error(`사용자 ${userId}의 채팅 세션 참조 삭제 오류:`, error);
-          }
+          const userChatSessionRef = doc(db, 'users', userId, 'chatSessions', sessionId);
+          docsToDelete.push(userChatSessionRef);
+          participantCount.set(userId, (participantCount.get(userId) || 0) + 1);
         }
       }
     }
@@ -86,14 +86,11 @@ export const deleteChatSessionsForPost = async (postId: string) => {
       await deleteBatchInChunks(docsToDelete);
     }
 
-    console.log(`게시글 ${postId}의 채팅 세션 ${sessionIds.length}개 삭제 완료 (총 ${docsToDelete.length}개 문서)`);
+    // 로깅: 양쪽 참여자 모두에게서 삭제되었는지 확인
+    console.log(`게시글 ${postId}의 채팅 세션 ${sessionIds.length}개 및 관련 문서 ${docsToDelete.length}개 삭제 완료`);
+    console.log(`삭제된 참여자: ${Array.from(participantCount.keys()).join(', ')}`);
   } catch (error: any) {
-    // 권한 에러는 무시 (다른 사용자의 채팅 세션은 삭제할 수 없음)
-    if (error.code === 'permission-denied') {
-      console.log('일부 채팅 세션 삭제 권한 없음 (정상)');
-      return;
-    }
     console.error('채팅 세션 삭제 오류:', error);
-    // 에러를 throw하지 않고 계속 진행
+    throw error; // 게시글 삭제 전에 오류를 알리기 위해 throw
   }
 };
