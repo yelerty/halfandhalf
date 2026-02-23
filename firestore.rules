@@ -46,8 +46,13 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasAll(['store', 'item', 'startTime', 'endTime', 'userEmail', 'userId', 'createdAt']);
 
-      // 게시글 수정/삭제: 작성자만 가능
-      allow update, delete: if isAuthenticated()
+      // 게시글 수정: 작성자만 가능 (userId 필드는 변경 불가)
+      allow update: if isAuthenticated()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
+
+      // 게시글 삭제: 작성자만 가능
+      allow delete: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
     }
 
