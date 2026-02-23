@@ -227,7 +227,7 @@ export default function MyPostsScreen() {
       // 현재 시간 기준으로 시간 설정
       const now = new Date();
       const startDate = new Date(now.getTime());
-      const endDate = new Date(now.getTime() + 30 * 60 * 1000); // 30분 후
+      const endDate = new Date(now.getTime() + 60 * 60 * 1000); // 1시간 후
 
       // 임시 게시글 생성 (수정 화면으로 이동하기 위해)
       const tempPostRef = await addDoc(collection(db, 'posts'), {
