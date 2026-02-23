@@ -120,6 +120,7 @@ export default function EditPostScreen() {
         date: formatDate(date),
         startTime: formatTime(startTime),
         endTime: formatTime(endTime),
+        userId: auth.currentUser.uid,
       });
 
       // 재등록 모드인 경우 보관함에서 삭제

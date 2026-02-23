@@ -240,7 +240,10 @@ export default function MyPostsScreen() {
         userEmail: auth.currentUser.email || '',
         location: location,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
+
+      console.log('임시 게시글 생성 완료:', tempPostRef.id);
 
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
