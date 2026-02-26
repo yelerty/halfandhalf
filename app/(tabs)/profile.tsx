@@ -16,6 +16,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [blacklistedUsers, setBlacklistedUsers] = useState<BlacklistedUser[]>([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -29,6 +30,9 @@ export default function ProfileScreen() {
         if (!isMounted) return;
 
         if (docSnapshot.exists()) {
+          // 익명 상태 확인
+          setIsAnonymous(docSnapshot.data()?.isAnonymous || false);
+
           const blacklistIds = docSnapshot.data()?.blacklist || [];
 
           if (blacklistIds.length === 0) {
@@ -115,8 +119,12 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.name}>사용자</Text>
-        <Text style={styles.email}>{auth.currentUser?.email || 'user@example.com'}</Text>
+        <Text style={styles.name}>{isAnonymous ? '게스트 사용자' : '사용자'}</Text>
+        <Text style={styles.email}>
+          {isAnonymous
+            ? `${auth.currentUser?.uid?.substring(0, 8) || 'guest'}... (익명)`
+            : auth.currentUser?.email || 'user@example.com'}
+        </Text>
       </View>
 
       <ScrollView style={styles.content}>
