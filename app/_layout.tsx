@@ -1,7 +1,8 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
+import { auth, db } from '../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
@@ -10,9 +11,34 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // 이미 인증됨
+        setUser(user);
+        setLoading(false);
+      } else {
+        // 인증되지 않음 → 익명 인증 시도
+        try {
+          const result = await signInAnonymously(auth);
+          const anonymousUser = result.user;
+
+          // 익명 사용자 문서 초기화
+          await setDoc(doc(db, 'users', anonymousUser.uid), {
+            email: `anonymous-${anonymousUser.uid.substring(0, 8)}@app.local`,
+            isAnonymous: true,
+            createdAt: new Date().toISOString(),
+            blacklist: [],
+          }, { merge: true });
+
+          setUser(anonymousUser);
+          console.log('익명 사용자로 자동 로그인됨:', anonymousUser.uid);
+        } catch (error: any) {
+          console.error('익명 인증 실패:', error);
+          // 실패해도 사용자에게 로그인 화면 표시
+          setUser(null);
+        }
+        setLoading(false);
+      }
     });
 
     return unsubscribe;
