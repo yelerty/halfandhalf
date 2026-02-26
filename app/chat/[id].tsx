@@ -224,10 +224,21 @@ export default function ChatScreen() {
         if (!hasMarkedAsReadRef.current) {
           try {
             const mySessionRef = doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams);
+            // 상대방 세션 참조도 업데이트해서 읽음 표시 반영
             await setDoc(mySessionRef, {
               unreadCount: 0,
               lastReadAt: serverTimestamp(),
             }, { merge: true });
+
+            // 상대방 세션 참조 업데이트 (상대방이 언제든 읽었는지 추적)
+            const otherUserId = postInfo?.userId || '';
+            if (otherUserId && otherUserId !== currentUserId) {
+              const otherSessionRef = doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams);
+              await setDoc(otherSessionRef, {
+                lastReadAt: serverTimestamp(),
+              }, { merge: true });
+            }
+
             hasMarkedAsReadRef.current = true;
           } catch (error) {
             console.error('읽음 처리 오류:', error);
@@ -312,6 +323,7 @@ export default function ChatScreen() {
         });
 
         // 3. 상대방 채팅 세션 참조도 생성 (merge로 안전하게)
+        // 첫 메시지이므로 상대방의 unreadCount는 1
         await setDoc(doc(db, 'users', postInfo.userId, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
           postStore: postInfo.store,
@@ -319,6 +331,8 @@ export default function ChatScreen() {
           sessionId: sessionIdFromParams,
           active: true,
           unreadCount: 1,
+          lastMessageAt: serverTimestamp(),
+          lastMessage: messageText,
           joinedAt: serverTimestamp(),
         }, { merge: true });
 
@@ -329,6 +343,24 @@ export default function ChatScreen() {
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
         }, { merge: true });
+
+        // 상대방 세션 참조도 업데이트
+        const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
+        if (otherUserId && otherUserId !== currentUserId) {
+          try {
+            const otherSessionRef = doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams);
+            const otherSessionDoc = await getDoc(otherSessionRef);
+            const currentUnreadCount = otherSessionDoc.exists() ? (otherSessionDoc.data()?.unreadCount || 0) : 0;
+
+            await setDoc(otherSessionRef, {
+              lastMessageAt: serverTimestamp(),
+              lastMessage: messageText,
+              unreadCount: currentUnreadCount + 1,
+            }, { merge: true });
+          } catch (error) {
+            console.error('상대방 세션 업데이트 오류:', error);
+          }
+        }
       }
 
       // 메시지 저장
@@ -341,6 +373,23 @@ export default function ChatScreen() {
 
       // 저장 확인
       console.log(`[메시지 저장됨] ID: ${docRef.id}, 길이: ${messageText.length}`);
+
+      // 상대방의 unreadCount 증가
+      const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
+      if (otherUserId && otherUserId !== currentUserId) {
+        try {
+          const otherSessionRef = doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams);
+          const otherSessionDoc = await getDoc(otherSessionRef);
+          const currentUnreadCount = otherSessionDoc.exists() ? (otherSessionDoc.data()?.unreadCount || 0) : 0;
+
+          await setDoc(otherSessionRef, {
+            unreadCount: currentUnreadCount + 1,
+          }, { merge: true });
+        } catch (error) {
+          console.error('상대방 unreadCount 업데이트 오류:', error);
+          // 계속 진행 (중요하지 않음)
+        }
+      }
 
       // 구독을 통해 실제 메시지를 받으면 임시 메시지는 자동으로 대체됨
     } catch (error: any) {
