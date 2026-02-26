@@ -32,6 +32,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [postInfo, setPostInfo] = useState<any>(null);
   const [sessionExists, setSessionExists] = useState(false);
+  const [partnerLeft, setPartnerLeft] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasMarkedAsReadRef = useRef(false);
 
@@ -142,6 +143,60 @@ export default function ChatScreen() {
     };
   }, [sessionIdFromParams]);
 
+  // 상대방이 나간 것을 감지하는 useEffect
+  useEffect(() => {
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
+
+    const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+
+    const unsubscribe = onSnapshot(
+      sessionDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          // 세션이 삭제됨 (상대방도 나감)
+          if (!partnerLeft) {
+            setPartnerLeft(true);
+          }
+          return;
+        }
+
+        const sessionData = snapshot.data();
+        const activeParticipants = sessionData?.activeParticipants || [];
+        const isMySessionActive = activeParticipants.includes(auth.currentUser?.uid);
+
+        // 내가 여전히 세션에 있는데 상대방이 없는 경우
+        if (isMySessionActive && activeParticipants.length < 2) {
+          if (!partnerLeft) {
+            setPartnerLeft(true);
+          }
+        }
+      },
+      (error) => {
+        console.error('세션 구독 오류:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [sessionIdFromParams, sessionExists, partnerLeft]);
+
+  // 상대방이 나갔을 때 처리
+  useEffect(() => {
+    if (!partnerLeft) return;
+
+    // "상대방이 채팅방을 나갔습니다" 표시
+    Alert.alert(
+      i18n.t('common.confirm'),
+      i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.'
+    );
+
+    // 2초 후 자동으로 화면 나가기
+    const timer = setTimeout(() => {
+      router.back();
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [partnerLeft]);
+
   // 메시지 실시간 구독 (세션이 존재할 때만)
   useEffect(() => {
     if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
@@ -239,6 +294,7 @@ export default function ChatScreen() {
           postStore: postInfo.store,
           postItem: postInfo.item,
           participants,
+          activeParticipants: participants, // 양쪽 모두 활성 상태로 시작
           createdAt: serverTimestamp(),
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
@@ -328,36 +384,40 @@ export default function ChatScreen() {
             if (!auth.currentUser) return;
 
             try {
-              await setDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams), {
-                active: false,
-                leftAt: serverTimestamp(),
-              }, { merge: true });
+              const currentUserId = auth.currentUser.uid;
+              const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
 
-              const participants = [auth.currentUser.uid, postInfo.userId];
-              const otherUserId = participants.find(id => id !== auth.currentUser?.uid);
+              // 1. chatSessions 문서의 activeParticipants에서 자신 제거
+              const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+              const sessionDoc = await getDoc(sessionDocRef);
 
-              if (otherUserId) {
-                const otherUserSessionDoc = await getDoc(
-                  doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams)
-                );
+              if (sessionDoc.exists()) {
+                const currentActiveParticipants = sessionDoc.data()?.activeParticipants || [];
+                const updatedActiveParticipants = currentActiveParticipants.filter((id: string) => id !== currentUserId);
 
-                if (!otherUserSessionDoc.exists() || otherUserSessionDoc.data()?.active === false) {
+                // 상대방도 이미 나갔다면 세션 전체 삭제
+                if (updatedActiveParticipants.length === 0) {
+                  // 메시지 삭제
                   const messagesSnapshot = await getDocs(
                     collection(db, 'chatSessions', sessionIdFromParams, 'messages')
                   );
                   const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
                   await Promise.all(deletePromises);
 
-                  await deleteDoc(doc(db, 'chatSessions', sessionIdFromParams));
-
-                  if (auth.currentUser) {
-                    await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
-                  }
+                  // 세션 및 양쪽 참조 삭제
+                  await deleteDoc(sessionDocRef);
+                  await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
                   await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
+                } else {
+                  // 상대방은 여전히 참여 중 - 자신만 제거 및 사용자 참조만 삭제
+                  await setDoc(sessionDocRef, {
+                    activeParticipants: updatedActiveParticipants,
+                  }, { merge: true });
+
+                  await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
                 }
               }
 
-              Alert.alert(i18n.t('common.confirm'), i18n.t('chat.leftChat'));
               router.back();
             } catch (error: any) {
               console.error('채팅방 나가기 오류:', error);
