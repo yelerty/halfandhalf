@@ -109,12 +109,9 @@ export default function ChatsScreen() {
       },
       (error) => {
         // 권한 에러는 로그인 전이므로 무시
-        if (error.code === 'permission-denied') {
-          console.log('Still loading auth state...');
-          setLoading(false);
-          return;
+        if (error.code !== 'permission-denied') {
+          console.error('채팅 세션 로딩 오류:', error);
         }
-        console.error('채팅 세션 로딩 오류:', error);
         setLoading(false);
       }
     );

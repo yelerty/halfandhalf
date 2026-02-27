@@ -95,11 +95,9 @@ export default function HomeScreen() {
       },
       (error) => {
         // 권한 에러는 로그인 전이므로 무시
-        if (error.code === 'permission-denied') {
-          console.log('Still loading auth state...');
-          return;
+        if (error.code !== 'permission-denied') {
+          console.error('블랙리스트 로딩 오류:', error);
         }
-        console.error('블랙리스트 로딩 오류:', error);
       }
     );
 

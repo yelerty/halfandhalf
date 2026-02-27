@@ -261,7 +261,6 @@ export default function ChatScreen() {
         }, 100);
       },
       (error) => {
-        console.error('메시지 구독 오류:', error);
         if (error.code === 'permission-denied') {
           // 세션이 삭제되었거나 권한이 없음
           Alert.alert(
@@ -269,6 +268,8 @@ export default function ChatScreen() {
             i18n.t('chat.sessionDeleted') || '채팅 세션이 삭제되었습니다.',
             [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]
           );
+        } else {
+          console.error('메시지 구독 오류:', error);
         }
       }
     );
