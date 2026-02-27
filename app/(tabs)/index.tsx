@@ -276,36 +276,9 @@ export default function HomeScreen() {
     }
   };
 
-  const handleStartChat = (post: Post) => {
-    if (!auth.currentUser) {
-      Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
-      return;
-    }
-
-    // 본인 게시글 체크
-    if (post.userId === auth.currentUser.uid) {
-      Alert.alert(i18n.t('common.confirm'), i18n.t('home.cannotChatOwnPost'));
-      return;
-    }
-
-    const currentUserId = auth.currentUser.uid;
-
-    // 채팅 세션 ID 생성 (일관된 순서 보장)
-    const participants = [currentUserId, post.userId].sort();
-    const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
-
-    // 세션 생성 없이 바로 채팅 화면으로 이동 (첫 메시지 전송 시 세션 생성)
+  const handleViewDetail = (post: Post) => {
     router.push({
-      pathname: `/chat/${sessionId}`,
-      params: {
-        postId: post.id,
-        postStore: post.store,
-        postItem: post.item,
-        postUserId: post.userId,
-        postUserEmail: post.userEmail,
-        postStartTime: post.startTime,
-        postEndTime: post.endTime,
-      },
+      pathname: `/post-detail/${post.id}`,
     });
   };
 
@@ -354,7 +327,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={post.id}
               style={styles.postCard}
-              onPress={() => handleStartChat(post)}
+              onPress={() => handleViewDetail(post)}
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{post.store}</Text>
@@ -377,8 +350,8 @@ export default function HomeScreen() {
               <Text style={styles.cardItem}>{post.item}</Text>
               <Text style={styles.cardUser}>{post.userEmail}</Text>
               <View style={styles.chatIndicator}>
-                <Ionicons name="chatbubble-outline" size={16} color="#4CAF50" />
-                <Text style={styles.chatText}>{i18n.t('home.chatWith')}</Text>
+                <Ionicons name="arrow-forward" size={16} color="#4CAF50" />
+                <Text style={styles.chatText}>{i18n.t('home.viewDetail')}</Text>
               </View>
             </TouchableOpacity>
           ))

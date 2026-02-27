@@ -51,7 +51,7 @@ export default {
     searchPlaceholder: '매장 검색 (예: 코스트코)',
     noResults: '검색 결과가 없습니다',
     noPosts: '아직 게시글이 없습니다',
-    chatWith: '채팅하기',
+    viewDetail: '상세 보기',
     cannotChatOwnPost: '본인이 작성한 게시글에는 채팅할 수 없습니다.',
     addedToBlacklist: '님을 블랙리스트에 추가했습니다.',
     loadMore: '더 보기',
@@ -77,6 +77,8 @@ export default {
     title: '채팅',
     noChats: '아직 채팅이 없습니다',
     startChatting: '게시글을 통해 채팅을 시작하세요!',
+    deleteTitle: '채팅 삭제',
+    deleteConfirm: '정말 이 채팅을 삭제하시겠습니까?',
   },
 
   // Chat Screen
@@ -88,6 +90,7 @@ export default {
     leaveChatConfirm: '정말 나가시겠습니까?',
     leftChat: '채팅방에서 나갔습니다.',
     partnerLeft: '상대방이 채팅방을 나갔습니다.',
+    partnerTyping: '상대방이 입력 중...',
     sessionNotFound: '채팅 세션이 존재하지 않습니다.',
     sessionDeleted: '채팅 세션이 삭제되었습니다.',
     postDeleted: '게시글이 삭제되어 채팅을 시작할 수 없습니다.',
@@ -136,6 +139,20 @@ export default {
     updateSuccess: '게시글이 수정되었습니다!',
     repostSuccess: '게시글이 재등록되었습니다!',
     deleteSuccess: '게시글과 관련 채팅이 모두 삭제되었습니다.',
+    loadError: '게시글을 불러올 수 없습니다.',
+  },
+
+  // Post Detail Screen
+  postDetail: {
+    itemInfo: '물건 정보',
+    schedule: '시간 정보',
+    location: '위치',
+    item: '물건',
+    date: '날짜',
+    time: '시간',
+    coordinates: '좌표',
+    startChat: '채팅 시작',
+    notFound: '게시글을 찾을 수 없습니다.',
     loadError: '게시글을 불러올 수 없습니다.',
   },
 

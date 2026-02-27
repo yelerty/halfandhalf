@@ -33,8 +33,10 @@ export default function ChatScreen() {
   const [postInfo, setPostInfo] = useState<any>(null);
   const [sessionExists, setSessionExists] = useState(false);
   const [partnerLeft, setPartnerLeft] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasMarkedAsReadRef = useRef(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 채팅 세션 정보 가져오기 또는 params에서 설정
   useEffect(() => {
@@ -143,7 +145,7 @@ export default function ChatScreen() {
     };
   }, [sessionIdFromParams]);
 
-  // 상대방이 나간 것을 감지하는 useEffect
+  // 상대방이 나간 것을 감지하고 입력 중 상태를 감시하는 useEffect
   useEffect(() => {
     if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
 
@@ -170,6 +172,15 @@ export default function ChatScreen() {
             setPartnerLeft(true);
           }
         }
+
+        // 상대방의 입력 중 상태 감시
+        const typingByUserId = sessionData?.typingBy;
+        const partnerIsTyping =
+          typingByUserId &&
+          typingByUserId !== auth.currentUser?.uid &&
+          activeParticipants.includes(typingByUserId);
+
+        setPartnerTyping(!!partnerIsTyping);
       },
       (error) => {
         console.error('세션 구독 오류:', error);
@@ -391,6 +402,21 @@ export default function ChatScreen() {
         }
       }
 
+      // 메시지 전송 후 입력 중 상태 해제
+      try {
+        const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+        await setDoc(sessionDocRef, {
+          typingBy: null,
+        }, { merge: true });
+
+        // 타이머도 정리
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+      } catch (error) {
+        console.error('입력 상태 해제 오류:', error);
+      }
+
       // 구독을 통해 실제 메시지를 받으면 임시 메시지는 자동으로 대체됨
     } catch (error: any) {
       console.error('메시지 전송 오류:', error);
@@ -406,6 +432,38 @@ export default function ChatScreen() {
       }
 
       Alert.alert(i18n.t('common.error'), errorMessage);
+    }
+  };
+
+  const handleMessageChange = async (text: string) => {
+    setMessage(text);
+
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
+
+    // 입력 중 상태 업데이트 (디바운싱)
+    try {
+      const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+      await setDoc(sessionDocRef, {
+        typingBy: text.trim() ? auth.currentUser.uid : null,
+      }, { merge: true });
+
+      // 이전 타이머 제거
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // 2초 후 입력 중 상태 해제
+      typingTimeoutRef.current = setTimeout(async () => {
+        try {
+          await setDoc(sessionDocRef, {
+            typingBy: null,
+          }, { merge: true });
+        } catch (error) {
+          console.error('입력 상태 해제 오류:', error);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error('입력 상태 업데이트 오류:', error);
     }
   };
 
@@ -459,12 +517,19 @@ export default function ChatScreen() {
                   await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
                 } else {
                   // 상대방은 여전히 참여 중 - 자신만 제거 및 사용자 참조만 삭제
+                  // 입력 중 상태도 함께 해제
                   await setDoc(sessionDocRef, {
                     activeParticipants: updatedActiveParticipants,
+                    typingBy: null,
                   }, { merge: true });
 
                   await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
                 }
+              }
+
+              // 타이머 정리
+              if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
               }
 
               router.back();
@@ -533,14 +598,19 @@ export default function ChatScreen() {
         </ScrollView>
 
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder={i18n.t('chat.sendPlaceholder')}
-            value={message}
-            onChangeText={setMessage}
-            multiline
-            maxLength={2000}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder={i18n.t('chat.sendPlaceholder')}
+              value={message}
+              onChangeText={handleMessageChange}
+              multiline
+              maxLength={2000}
+            />
+            {partnerTyping && (
+              <Text style={styles.typingIndicator}>{i18n.t('chat.partnerTyping')}</Text>
+            )}
+          </View>
           <TouchableOpacity
             style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
             onPress={handleSend}
@@ -643,18 +713,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#ddd',
     alignItems: 'flex-end',
+    gap: 8,
+  },
+  inputWrapper: {
+    flex: 1,
   },
   input: {
-    flex: 1,
     backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginRight: 8,
     fontSize: 16,
     maxHeight: 120,
     minHeight: 44,
     textAlignVertical: 'top',
+  },
+  typingIndicator: {
+    fontSize: 12,
+    color: '#999',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    fontStyle: 'italic',
   },
   sendButton: {
     width: 40,

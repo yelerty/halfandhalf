@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { collection, query, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import i18n from '../../i18n';
+import { Animated, PanResponder } from 'react-native';
 
 interface ChatSession {
   sessionId: string;
@@ -19,6 +20,33 @@ export default function ChatsScreen() {
   const router = useRouter();
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  const handleDeleteChat = (sessionId: string) => {
+    Alert.alert(
+      i18n.t('chats.deleteTitle'),
+      i18n.t('chats.deleteConfirm'),
+      [
+        { text: i18n.t('common.cancel'), style: 'cancel' },
+        {
+          text: i18n.t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            if (!auth.currentUser) return;
+
+            try {
+              // 자신의 chatSessions 참조 삭제
+              await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId));
+              setSelectedSessionId(null);
+            } catch (error: any) {
+              console.error('채팅 삭제 오류:', error);
+              Alert.alert(i18n.t('common.error'), error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -102,29 +130,55 @@ export default function ChatsScreen() {
           <Text style={styles.emptyText}>{i18n.t('chats.noChats')}</Text>
         ) : (
           chatSessions.map((session) => (
-            <TouchableOpacity
+            <View
               key={session.sessionId}
-              style={styles.chatCard}
-              onPress={() => router.push(`/chat/${session.sessionId}`)}
+              style={[
+                styles.chatCardWrapper,
+                selectedSessionId === session.sessionId && styles.chatCardSelected,
+              ]}
             >
-              <View style={styles.iconContainer}>
-                <Ionicons name="chatbubbles" size={40} color="#4CAF50" />
-                {session.unreadCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {session.unreadCount > 99 ? '99+' : session.unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.chatInfo}>
-                <Text style={styles.postTitle}>{session.postTitle}</Text>
-                <Text style={styles.lastMessage} numberOfLines={1}>
-                  {session.lastMessage}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#ccc" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.chatCard}
+                onPress={() => router.push(`/chat/${session.sessionId}`)}
+                onLongPress={() => setSelectedSessionId(session.sessionId)}
+              >
+                <View style={styles.iconContainer}>
+                  <Ionicons name="chatbubbles" size={40} color="#4CAF50" />
+                  {session.unreadCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {session.unreadCount > 99 ? '99+' : session.unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.chatInfo}>
+                  <Text style={styles.postTitle}>{session.postTitle}</Text>
+                  <Text style={styles.lastMessage} numberOfLines={1}>
+                    {session.lastMessage}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#ccc" />
+              </TouchableOpacity>
+
+              {selectedSessionId === session.sessionId && (
+                <View style={styles.deleteAction}>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteChat(session.sessionId)}
+                  >
+                    <Ionicons name="trash" size={20} color="white" />
+                    <Text style={styles.deleteText}>{i18n.t('common.delete')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setSelectedSessionId(null)}
+                  >
+                    <Text style={styles.cancelText}>{i18n.t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           ))
         )}
       </ScrollView>
@@ -157,13 +211,18 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 16,
   },
+  chatCardWrapper: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  chatCardSelected: {
+    backgroundColor: '#f5f5f5',
+  },
   chatCard: {
     backgroundColor: 'white',
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   iconContainer: {
     marginRight: 12,
@@ -203,5 +262,40 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     color: '#666',
+  },
+  deleteAction: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  deleteButton: {
+    flex: 1,
+    backgroundColor: '#ff5252',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  deleteText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  cancelText: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

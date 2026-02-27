@@ -51,7 +51,7 @@ export default {
     searchPlaceholder: 'Search stores (e.g., Costco)',
     noResults: 'No results found',
     noPosts: 'No posts yet',
-    chatWith: 'Chat',
+    viewDetail: 'View Details',
     cannotChatOwnPost: 'You cannot chat on your own post.',
     addedToBlacklist: ' has been added to your blacklist.',
     loadMore: 'Load More',
@@ -77,6 +77,8 @@ export default {
     title: 'Chats',
     noChats: 'No chats yet',
     startChatting: 'Start chatting through posts!',
+    deleteTitle: 'Delete Chat',
+    deleteConfirm: 'Are you sure you want to delete this chat?',
   },
 
   // Chat Screen
@@ -88,6 +90,7 @@ export default {
     leaveChatConfirm: 'Are you sure you want to leave?',
     leftChat: 'You have left the chat.',
     partnerLeft: 'Your partner has left the chat.',
+    partnerTyping: 'Partner is typing...',
     sessionNotFound: 'Chat session does not exist.',
     sessionDeleted: 'Chat session has been deleted.',
     postDeleted: 'The post has been deleted and chat cannot be started.',
@@ -136,6 +139,20 @@ export default {
     updateSuccess: 'Post has been updated!',
     repostSuccess: 'Post has been reposted!',
     deleteSuccess: 'Post and related chats have been deleted.',
+    loadError: 'Failed to load post.',
+  },
+
+  // Post Detail Screen
+  postDetail: {
+    itemInfo: 'Item Info',
+    schedule: 'Schedule',
+    location: 'Location',
+    item: 'Item',
+    date: 'Date',
+    time: 'Time',
+    coordinates: 'Coordinates',
+    startChat: 'Start Chat',
+    notFound: 'Post not found.',
     loadError: 'Failed to load post.',
   },
 
