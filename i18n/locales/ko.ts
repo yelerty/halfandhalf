@@ -79,6 +79,7 @@ export default {
     startChatting: '게시글을 통해 채팅을 시작하세요!',
     deleteTitle: '채팅 삭제',
     deleteConfirm: '정말 이 채팅을 삭제하시겠습니까?',
+    deleteError: '채팅을 삭제할 수 없습니다. 다시 시도해주세요.',
   },
 
   // Chat Screen

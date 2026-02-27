@@ -32,15 +32,23 @@ export default function ChatsScreen() {
           text: i18n.t('common.delete'),
           style: 'destructive',
           onPress: async () => {
-            if (!auth.currentUser) return;
+            if (!auth.currentUser) {
+              Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
+              return;
+            }
 
             try {
               // 자신의 chatSessions 참조 삭제
-              await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId));
+              const userSessionRef = doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionId);
+              await deleteDoc(userSessionRef);
               setSelectedSessionId(null);
             } catch (error: any) {
               console.error('채팅 삭제 오류:', error);
-              Alert.alert(i18n.t('common.error'), error.message);
+              let errorMsg = i18n.t('chats.deleteError');
+              if (error.code === 'permission-denied') {
+                errorMsg = i18n.t('errors.firebaseConfig');
+              }
+              Alert.alert(i18n.t('common.error'), errorMsg);
             }
           },
         },

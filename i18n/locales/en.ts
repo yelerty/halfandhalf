@@ -79,6 +79,7 @@ export default {
     startChatting: 'Start chatting through posts!',
     deleteTitle: 'Delete Chat',
     deleteConfirm: 'Are you sure you want to delete this chat?',
+    deleteError: 'Failed to delete chat. Please try again.',
   },
 
   // Chat Screen
