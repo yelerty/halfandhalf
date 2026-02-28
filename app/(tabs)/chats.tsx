@@ -43,11 +43,8 @@ export default function ChatsScreen() {
               await deleteDoc(userSessionRef);
               setSelectedSessionId(null);
             } catch (error: any) {
-              // permission-denied는 권한 확인 중 발생하는 정상 케이스
-              if (error.code !== 'permission-denied') {
-                console.error('채팅 삭제 오류:', error);
-                Alert.alert(i18n.t('common.error'), i18n.t('chats.deleteError'));
-              }
+              console.error('채팅 삭제 실패 - 코드:', error.code, '메시지:', error.message);
+              Alert.alert(i18n.t('common.error'), i18n.t('chats.deleteError'));
             }
           },
         },
