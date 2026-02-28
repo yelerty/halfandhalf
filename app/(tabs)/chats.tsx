@@ -43,12 +43,11 @@ export default function ChatsScreen() {
               await deleteDoc(userSessionRef);
               setSelectedSessionId(null);
             } catch (error: any) {
-              console.error('채팅 삭제 오류:', error);
-              let errorMsg = i18n.t('chats.deleteError');
-              if (error.code === 'permission-denied') {
-                errorMsg = i18n.t('errors.firebaseConfig');
+              // permission-denied는 권한 확인 중 발생하는 정상 케이스
+              if (error.code !== 'permission-denied') {
+                console.error('채팅 삭제 오류:', error);
+                Alert.alert(i18n.t('common.error'), i18n.t('chats.deleteError'));
               }
-              Alert.alert(i18n.t('common.error'), errorMsg);
             }
           },
         },

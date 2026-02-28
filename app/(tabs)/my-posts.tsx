@@ -136,17 +136,14 @@ export default function MyPostsScreen() {
       loadArchivedPosts();
     }, (error) => {
       // 권한 에러는 로그인 전이므로 무시
-      if (error.code === 'permission-denied') {
-        console.log('Still loading auth state...');
+      if (error.code !== 'permission-denied') {
+        console.error('내 게시글 로드 오류:', error);
         if (isMounted) {
-          setLoading(false);
+          Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
         }
-        return;
       }
-      console.error('내 게시글 로드 오류:', error);
       if (isMounted) {
         setLoading(false);
-        Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
       }
     });
 

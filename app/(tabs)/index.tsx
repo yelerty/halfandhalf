@@ -151,9 +151,7 @@ export default function HomeScreen() {
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === PAGE_SIZE);
     } catch (error: any) {
-      if (error.code === 'permission-denied') {
-        console.log('Still loading auth state...');
-      } else {
+      if (error.code !== 'permission-denied') {
         console.error('게시글 로딩 오류:', error);
       }
     } finally {
