@@ -2,29 +2,39 @@ import { collection, query, where, getDocs, deleteDoc, doc, writeBatch, Document
 import { db } from '../config/firebase';
 
 /**
- * 문서 참조 배열을 500개씩 나눠서 batch 삭제합니다.
+ * 문서 참조 배열을 500개씩 나눠서 batch 삭제합니다. (재시도 로직 포함)
  */
 const deleteBatchInChunks = async (docRefs: DocumentReference[]) => {
   const BATCH_LIMIT = 500;
+  const MAX_RETRIES = 3;
 
   for (let i = 0; i < docRefs.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(db);
     const chunk = docRefs.slice(i, i + BATCH_LIMIT);
+    let lastError: any = null;
 
-    for (const docRef of chunk) {
-      batch.delete(docRef);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const batch = writeBatch(db);
+        for (const docRef of chunk) {
+          batch.delete(docRef);
+        }
+        await batch.commit();
+        break;
+      } catch (error: any) {
+        lastError = error;
+        // 권한 에러는 재시도하지 않음
+        if (error.code === 'permission-denied') {
+          break;
+        }
+        // 마지막 재시도가 아니면 대기 후 재시도
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 100));
+        }
+      }
     }
 
-    try {
-      await batch.commit();
-      console.log(`Batch ${Math.floor(i / BATCH_LIMIT) + 1} 완료: ${chunk.length}개 문서 삭제`);
-    } catch (error: any) {
-      // 권한 에러는 무시 (다른 사용자의 문서는 삭제할 수 없음)
-      if (error.code === 'permission-denied') {
-        console.log(`Batch ${Math.floor(i / BATCH_LIMIT) + 1} 권한 없음 (일부 문서 삭제 실패, 정상)`);
-      } else {
-        console.error(`Batch ${Math.floor(i / BATCH_LIMIT) + 1} 삭제 오류:`, error);
-      }
+    if (lastError && lastError.code !== 'permission-denied') {
+      throw lastError;
     }
   }
 };

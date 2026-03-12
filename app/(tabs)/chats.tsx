@@ -1,11 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { collection, query, onSnapshot, doc, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import i18n from '../../i18n';
-import { Animated, PanResponder } from 'react-native';
 
 interface ChatSession {
   sessionId: string;

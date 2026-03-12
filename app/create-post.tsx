@@ -47,14 +47,50 @@ export default function CreatePostScreen() {
     };
   }, []);
 
-  const handleSubmit = async () => {
-    if (!store || !item) {
+  const validateInputs = (): boolean => {
+    const trimmedStore = store.trim();
+    const trimmedItem = item.trim();
+
+    if (!trimmedStore || !trimmedItem) {
       Alert.alert(i18n.t('common.error'), i18n.t('createPost.fillAllFields'));
-      return;
+      return false;
+    }
+
+    if (trimmedStore.length < 2) {
+      Alert.alert(i18n.t('common.error'), '매장명은 최소 2자 이상이어야 합니다.');
+      return false;
+    }
+
+    if (trimmedStore.length > 50) {
+      Alert.alert(i18n.t('common.error'), '매장명은 50자 이하여야 합니다.');
+      return false;
+    }
+
+    if (trimmedItem.length < 2) {
+      Alert.alert(i18n.t('common.error'), '물품명은 최소 2자 이상이어야 합니다.');
+      return false;
+    }
+
+    if (trimmedItem.length > 100) {
+      Alert.alert(i18n.t('common.error'), '물품명은 100자 이하여야 합니다.');
+      return false;
     }
 
     if (!location) {
       Alert.alert(i18n.t('common.error'), i18n.t('createPost.locationRequired'));
+      return false;
+    }
+
+    if (!auth.currentUser) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateInputs()) {
       return;
     }
 
@@ -69,16 +105,16 @@ export default function CreatePostScreen() {
       const currentUserEmail = auth.currentUser.email;
 
       await addDoc(collection(db, 'posts'), {
-        store,
-        item,
+        store: store.trim(),
+        item: item.trim(),
         date: formatDate(date),
         startTime: formatTime(startTime),
         endTime: formatTime(endTime),
         userId: currentUserId,
         userEmail: currentUserEmail,
         location: {
-          latitude: location.latitude,
-          longitude: location.longitude,
+          latitude: location!.latitude,
+          longitude: location!.longitude,
         },
         createdAt: serverTimestamp(),
       });

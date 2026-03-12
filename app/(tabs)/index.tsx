@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, getDocs, setDoc, serverTimestamp, limit, startAfter } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import * as Location from 'expo-location';
@@ -9,6 +9,7 @@ import { calculateDistance } from '../../utils/location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 import { isPostExpired } from '../../utils/dateUtils';
+import { createDebouncedCallback } from '../../utils/debounce';
 import i18n from '../../i18n';
 
 interface Post {
@@ -35,12 +36,14 @@ export default function HomeScreen() {
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [storeFilter, setStoreFilter] = useState('');
+  const [debouncedFilter, setDebouncedFilter] = useState('');
   const [blacklist, setBlacklist] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const debouncedSetFilter = useRef(createDebouncedCallback((value: string) => setDebouncedFilter(value), 300)).current;
 
   const blacklistSet = useMemo(() => new Set(blacklist), [blacklist]);
 
@@ -210,6 +213,12 @@ export default function HomeScreen() {
     loadPosts();
   }, []);
 
+  // 필터 입력값 즉시 업데이트 (UI 반응성)
+  const handleStoreFilterChange = (text: string) => {
+    setStoreFilter(text);
+    debouncedSetFilter(text);
+  };
+
   // 필터링 (내 게시글 제외 & 매장 & 블랙리스트 & 30km 반경)
   useEffect(() => {
     let filtered = posts;
@@ -233,10 +242,10 @@ export default function HomeScreen() {
       });
     }
 
-    // 매장 필터
-    if (storeFilter.trim()) {
+    // 매장 필터 (debounced)
+    if (debouncedFilter.trim()) {
       filtered = filtered.filter(post =>
-        post.store.toLowerCase().includes(storeFilter.toLowerCase())
+        post.store.toLowerCase().includes(debouncedFilter.toLowerCase())
       );
     }
 
@@ -244,7 +253,7 @@ export default function HomeScreen() {
     filtered = filtered.filter(post => !blacklistSet.has(post.userId));
 
     setFilteredPosts(filtered);
-  }, [posts, storeFilter, blacklistSet, userLocation]);
+  }, [posts, debouncedFilter, blacklistSet, userLocation]);
 
   const handleAddToBlacklist = async (userId: string, userEmail: string) => {
     if (!auth.currentUser) {
@@ -290,11 +299,14 @@ export default function HomeScreen() {
             style={styles.searchInput}
             placeholder={i18n.t('home.searchPlaceholder')}
             value={storeFilter}
-            onChangeText={setStoreFilter}
+            onChangeText={handleStoreFilterChange}
             placeholderTextColor="#999"
           />
           {storeFilter ? (
-            <TouchableOpacity onPress={() => setStoreFilter('')}>
+            <TouchableOpacity onPress={() => {
+              setStoreFilter('');
+              setDebouncedFilter('');
+            }}>
               <Ionicons name="close-circle" size={20} color="#666" />
             </TouchableOpacity>
           ) : null}

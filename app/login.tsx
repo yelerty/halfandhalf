@@ -6,13 +6,42 @@ import { auth, db } from '../config/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import i18n from '../i18n';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 6;
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
 
+  const validateInput = (): boolean => {
+    if (!email.trim()) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.email') + '를 입력해주세요.');
+      return false;
+    }
+
+    if (!EMAIL_REGEX.test(email.trim())) {
+      Alert.alert(i18n.t('common.error'), '올바른 이메일 형식을 입력해주세요.');
+      return false;
+    }
+
+    if (!password) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.password') + '를 입력해주세요.');
+      return false;
+    }
+
+    if (isSignUp && password.length < MIN_PASSWORD_LENGTH) {
+      Alert.alert(i18n.t('common.error'), `비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
+      return false;
+    }
+
+    return true;
+  };
+
   const handleAuth = async () => {
+    if (!validateInput()) return;
+
     try {
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, password);
