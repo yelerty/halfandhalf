@@ -26,9 +26,7 @@ export default function TabLayout() {
         setTotalUnreadCount(total);
       },
       (error) => {
-        if (error.code !== 'permission-denied') {
-          console.error('채팅 세션 로딩 오류:', error);
-        }
+        // Permission-denied errors are expected, silently handle
       }
     );
 

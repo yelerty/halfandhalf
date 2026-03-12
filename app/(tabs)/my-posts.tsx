@@ -136,11 +136,8 @@ export default function MyPostsScreen() {
       loadArchivedPosts();
     }, (error) => {
       // 권한 에러는 로그인 전이므로 무시
-      if (error.code !== 'permission-denied') {
-        console.error('내 게시글 로드 오류:', error);
-        if (isMounted) {
-          Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
-        }
+      if (error.code !== 'permission-denied' && isMounted) {
+        Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
       }
       if (isMounted) {
         setLoading(false);
@@ -172,7 +169,7 @@ export default function MyPostsScreen() {
         await AsyncStorage.setItem(key, JSON.stringify(expiredPosts));
       }
     } catch (error) {
-      console.error('보관함 저장 오류:', error);
+      // Silently fail - archive persistence is optional
     }
   };
 
@@ -189,7 +186,7 @@ export default function MyPostsScreen() {
         setArchivedPosts(archived);
       }
     } catch (error) {
-      console.error('보관된 게시글 로드 오류:', error);
+      // Silently fail - archive loading is optional
     }
   };
 
@@ -216,7 +213,6 @@ export default function MyPostsScreen() {
           longitude: loc.coords.longitude,
         };
       } catch (locError) {
-        console.error('위치 정보 가져오기 오류:', locError);
         Alert.alert(i18n.t('common.error'), i18n.t('createPost.locationRequired'));
         return;
       }
@@ -240,12 +236,9 @@ export default function MyPostsScreen() {
         updatedAt: serverTimestamp(),
       });
 
-      console.log('임시 게시글 생성 완료:', tempPostRef.id);
-
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
     } catch (error: any) {
-      console.error('재등록 오류:', error);
       Alert.alert(i18n.t('common.error'), error.message || '게시글 재등록 실패');
     }
   };

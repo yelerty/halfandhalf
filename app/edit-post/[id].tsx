@@ -48,7 +48,6 @@ export default function EditPostScreen() {
                 await deleteDoc(doc(db, 'posts', id));
                 router.back();
               } catch (error) {
-                console.error('임시 게시글 삭제 오류:', error);
                 router.back();
               }
             },
@@ -93,7 +92,6 @@ export default function EditPostScreen() {
         router.back();
       }
     } catch (error: any) {
-      console.error('게시글 로드 오류:', error);
       Alert.alert(i18n.t('common.error'), i18n.t('editPost.loadError'));
       router.back();
     }
@@ -134,7 +132,6 @@ export default function EditPostScreen() {
             await AsyncStorage.setItem(key, JSON.stringify(filtered));
           }
         } catch (archiveError) {
-          console.error('보관함 삭제 오류:', archiveError);
           // 보관함 삭제 실패는 게시글 업데이트가 성공했으므로 계속 진행
         }
       }
@@ -142,7 +139,6 @@ export default function EditPostScreen() {
       Alert.alert(i18n.t('common.success'), isRepostMode ? i18n.t('editPost.repostSuccess') : i18n.t('editPost.updateSuccess'));
       router.back();
     } catch (error: any) {
-      console.error('게시글 업데이트 오류:', error);
       Alert.alert(i18n.t('common.error'), error.message || '게시글 업데이트 실패');
     } finally {
       setLoading(false);
@@ -175,7 +171,6 @@ export default function EditPostScreen() {
               Alert.alert(i18n.t('common.success'), i18n.t('editPost.deleteSuccess'));
               router.back();
             } catch (error: any) {
-              console.error('게시글 삭제 오류:', error);
               Alert.alert(i18n.t('common.error'), error.message || '게시글 삭제 실패');
             } finally {
               setLoading(false);

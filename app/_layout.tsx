@@ -31,9 +31,7 @@ export default function RootLayout() {
           }, { merge: true });
 
           setUser(anonymousUser);
-          console.log('익명 사용자로 자동 로그인됨:', anonymousUser.uid);
         } catch (error: any) {
-          console.error('익명 인증 실패:', error);
           // 실패해도 사용자에게 로그인 화면 표시
           setUser(null);
         }

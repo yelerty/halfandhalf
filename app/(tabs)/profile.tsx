@@ -60,7 +60,6 @@ export default function ProfileScreen() {
                 });
               }
             } catch (error) {
-              console.error(`블랙리스트 사용자 ${userId} 조회 오류:`, error);
               users.push({
                 userId,
                 email: 'Error loading email',
@@ -76,9 +75,6 @@ export default function ProfileScreen() {
       },
       (error) => {
         // 권한 에러는 로그인 전이므로 무시
-        if (error.code !== 'permission-denied') {
-          console.error('블랙리스트 로딩 오류:', error);
-        }
       }
     );
 
@@ -93,7 +89,7 @@ export default function ProfileScreen() {
       await signOut(auth);
       router.replace('/login');
     } catch (error) {
-      console.error('로그아웃 오류:', error);
+      // Logout error handled silently
     }
   };
 
@@ -110,7 +106,7 @@ export default function ProfileScreen() {
         blacklist: updatedBlacklist
       }, { merge: true });
     } catch (error) {
-      console.error('블랙리스트 제거 오류:', error);
+      // Blacklist removal error handled silently
     }
   };
 

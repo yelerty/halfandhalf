@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 import { isPostExpired } from '../../utils/dateUtils';
 import { createDebouncedCallback } from '../../utils/debounce';
+import { FirestoreTimestamp } from '../../utils/types';
 import i18n from '../../i18n';
 
 interface Post {
@@ -25,7 +26,7 @@ interface Post {
     latitude: number;
     longitude: number;
   };
-  createdAt: any;
+  createdAt: FirestoreTimestamp;
 }
 
 const PAGE_SIZE = 20;
@@ -64,7 +65,7 @@ export default function HomeScreen() {
         await AsyncStorage.setItem(key, JSON.stringify(expiredPosts));
       }
     } catch (error) {
-      console.error('만료된 게시글 저장 오류:', error);
+      // Silently fail - expired post tracking is optional
     }
   };
 
@@ -98,9 +99,6 @@ export default function HomeScreen() {
       },
       (error) => {
         // 권한 에러는 로그인 전이므로 무시
-        if (error.code !== 'permission-denied') {
-          console.error('블랙리스트 로딩 오류:', error);
-        }
       }
     );
 
@@ -154,9 +152,7 @@ export default function HomeScreen() {
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === PAGE_SIZE);
     } catch (error: any) {
-      if (error.code !== 'permission-denied') {
-        console.error('게시글 로딩 오류:', error);
-      }
+      // Error handled silently
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -203,7 +199,7 @@ export default function HomeScreen() {
       setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.docs.length === PAGE_SIZE);
     } catch (error) {
-      console.error('추가 게시글 로딩 오류:', error);
+      // Error handled silently
     } finally {
       setLoadingMore(false);
     }
@@ -276,7 +272,6 @@ export default function HomeScreen() {
         Alert.alert(i18n.t('common.success'), `${userEmail}${i18n.t('home.addedToBlacklist')}`);
       }
     } catch (error) {
-      console.error('블랙리스트 추가 오류:', error);
       Alert.alert(i18n.t('common.error'), i18n.t('errors.generic'));
     }
   };

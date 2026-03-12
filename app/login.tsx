@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { getErrorMessage } from '../utils/types';
 import i18n from '../i18n';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,8 +74,8 @@ export default function LoginScreen() {
         }
       }
       router.replace('/(tabs)');
-    } catch (error: any) {
-      Alert.alert(i18n.t('common.error'), error.message);
+    } catch (error) {
+      Alert.alert(i18n.t('common.error'), getErrorMessage(error));
     }
   };
 

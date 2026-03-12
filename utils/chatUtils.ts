@@ -54,7 +54,6 @@ export const deleteChatSessionsForPost = async (postId: string) => {
     const chatSessionsSnapshot = await getDocs(chatSessionsQuery);
 
     if (chatSessionsSnapshot.empty) {
-      console.log(`게시글 ${postId}과 관련된 채팅 세션이 없습니다.`);
       return;
     }
 
@@ -96,11 +95,7 @@ export const deleteChatSessionsForPost = async (postId: string) => {
       await deleteBatchInChunks(docsToDelete);
     }
 
-    // 로깅: 양쪽 참여자 모두에게서 삭제되었는지 확인
-    console.log(`게시글 ${postId}의 채팅 세션 ${sessionIds.length}개 및 관련 문서 ${docsToDelete.length}개 삭제 완료`);
-    console.log(`삭제된 참여자: ${Array.from(participantCount.keys()).join(', ')}`);
   } catch (error: any) {
-    console.error('채팅 세션 삭제 오류:', error);
     throw error; // 게시글 삭제 전에 오류를 알리기 위해 throw
   }
 };

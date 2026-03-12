@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
+import { FirestoreTimestamp } from '../../utils/types';
 import i18n from '../../i18n';
 
 interface ChatSession {
@@ -11,7 +12,7 @@ interface ChatSession {
   postId: string;
   postTitle: string;
   lastMessage: string;
-  lastMessageTime: any;
+  lastMessageTime: FirestoreTimestamp | undefined;
   unreadCount: number;
 }
 
@@ -42,7 +43,6 @@ export default function ChatsScreen() {
               await deleteDoc(userSessionRef);
               setSelectedSessionId(null);
             } catch (error: any) {
-              console.error('채팅 삭제 실패 - 코드:', error.code, '메시지:', error.message);
               Alert.alert(i18n.t('common.error'), i18n.t('chats.deleteError'));
             }
           },
@@ -104,9 +104,6 @@ export default function ChatsScreen() {
       },
       (error) => {
         // 권한 에러는 로그인 전이므로 무시
-        if (error.code !== 'permission-denied') {
-          console.error('채팅 세션 로딩 오류:', error);
-        }
         setLoading(false);
       }
     );

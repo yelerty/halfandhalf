@@ -54,7 +54,6 @@ export default function PostDetailScreen() {
         router.back();
       }
     } catch (error: any) {
-      console.error('게시글 로드 오류:', {
         code: error.code,
         message: error.message,
         postId: postId,

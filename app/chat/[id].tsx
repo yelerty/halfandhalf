@@ -4,13 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
+import { FirestoreTimestamp, getErrorMessage } from '../../utils/types';
 import i18n from '../../i18n';
 
 interface Message {
   id: string;
   text: string;
   senderId: string;
-  createdAt: any;
+  createdAt: FirestoreTimestamp;
   isTemp?: boolean;
 }
 
@@ -44,7 +45,6 @@ export default function ChatScreen() {
 
     const loadChatSession = async () => {
       if (!sessionIdFromParams || !auth.currentUser) {
-        console.error('sessionId 또는 currentUser가 없습니다');
         return;
       }
 
@@ -119,7 +119,6 @@ export default function ChatScreen() {
           router.back();
         }
       } catch (error: any) {
-        console.error('채팅 세션 로드 오류:', error);
         // permission-denied는 세션이 아직 없는 정상 케이스
         if (error.code === 'permission-denied' && postIdFromParams) {
           setSessionExists(false);
@@ -183,7 +182,7 @@ export default function ChatScreen() {
         setPartnerTyping(!!partnerIsTyping);
       },
       (error) => {
-        console.error('세션 구독 오류:', error);
+        // Session subscription error handled silently
       }
     );
 
@@ -224,11 +223,6 @@ export default function ChatScreen() {
           ...doc.data()
         })) as Message[];
 
-        // 메시지 렌더링 디버깅
-        messagesData.forEach((msg, index) => {
-          console.log(`[메시지 #${index + 1}] 발신자: ${msg.senderId === auth.currentUser?.uid ? '나' : '상대'}, 길이: ${msg.text?.length || 0}, 내용: "${msg.text}"`);
-        });
-
         setMessages(messagesData);
 
         // 첫 구독 시에만 읽음 처리 (중복 방지)
@@ -252,7 +246,7 @@ export default function ChatScreen() {
 
             hasMarkedAsReadRef.current = true;
           } catch (error) {
-            console.error('읽음 처리 오류:', error);
+            // Read state update error handled silently
           }
         }
 
@@ -268,8 +262,6 @@ export default function ChatScreen() {
             i18n.t('chat.sessionDeleted') || '채팅 세션이 삭제되었습니다.',
             [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]
           );
-        } else {
-          console.error('메시지 구독 오류:', error);
         }
       }
     );
@@ -284,9 +276,6 @@ export default function ChatScreen() {
 
     // 원본 메시지 사용 (공백 포함)
     const messageText = message;
-
-    // 디버깅: 실제 저장되는 메시지 확인
-    console.log(`[메시지 전송] 길이: ${messageText.length}, 내용: "${messageText}"`);
 
     if (!messageText || messageText.length === 0) {
       Alert.alert(i18n.t('common.error'), '메시지가 비어있습니다.');
@@ -370,7 +359,7 @@ export default function ChatScreen() {
               unreadCount: currentUnreadCount + 1,
             }, { merge: true });
           } catch (error) {
-            console.error('상대방 세션 업데이트 오류:', error);
+            // Other user session update error handled silently
           }
         }
       }
@@ -382,9 +371,6 @@ export default function ChatScreen() {
         senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
-
-      // 저장 확인
-      console.log(`[메시지 저장됨] ID: ${docRef.id}, 길이: ${messageText.length}`);
 
       // 상대방의 unreadCount 증가
       const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
@@ -398,8 +384,7 @@ export default function ChatScreen() {
             unreadCount: currentUnreadCount + 1,
           }, { merge: true });
         } catch (error) {
-          console.error('상대방 unreadCount 업데이트 오류:', error);
-          // 계속 진행 (중요하지 않음)
+          // Other user unreadCount update error handled silently
         }
       }
 
@@ -415,12 +400,11 @@ export default function ChatScreen() {
           clearTimeout(typingTimeoutRef.current);
         }
       } catch (error) {
-        console.error('입력 상태 해제 오류:', error);
+        // Typing state clear error handled silently
       }
 
       // 구독을 통해 실제 메시지를 받으면 임시 메시지는 자동으로 대체됨
     } catch (error: any) {
-      console.error('메시지 전송 오류:', error);
 
       // 에러 발생 시 임시 메시지 제거
       setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
@@ -460,11 +444,11 @@ export default function ChatScreen() {
             typingBy: null,
           }, { merge: true });
         } catch (error) {
-          console.error('입력 상태 해제 오류:', error);
+          // Typing state clear error handled silently
         }
       }, 2000);
     } catch (error) {
-      console.error('입력 상태 업데이트 오류:', error);
+      // Typing state update error handled silently
     }
   };
 
@@ -535,7 +519,6 @@ export default function ChatScreen() {
 
               router.back();
             } catch (error: any) {
-              console.error('채팅방 나가기 오류:', error);
               Alert.alert(i18n.t('common.error'), error.message);
             }
           },
