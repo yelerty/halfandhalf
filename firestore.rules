@@ -27,8 +27,10 @@ service cloud.firestore {
 
     // posts 컬렉션
     match /posts/{postId} {
-      // 테스트용: 모든 접근 허용
+      // 모든 사용자가 읽기/생성/수정 가능
       allow read, write: if true;
+      // 게시글 소유자만 삭제 가능
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
     }
 
     // chatSessions 컬렉션
