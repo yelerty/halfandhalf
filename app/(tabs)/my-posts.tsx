@@ -106,12 +106,8 @@ export default function MyPostsScreen() {
         if (isPostExpired(post)) {
           // 보관함에 저장
           saveToArchive(post);
-          // 채팅 세션 삭제 후 서버에서 삭제
-          deletePromises.push(
-            deleteChatSessionsForPost(docSnapshot.id).then(() =>
-              deleteDoc(doc(db, 'posts', docSnapshot.id))
-            )
-          );
+          // 주: 자동 삭제는 권한 문제로 비활성화
+          // 사용자가 수동으로 삭제하도록 유도
         } else {
           postsData.push(post);
         }
