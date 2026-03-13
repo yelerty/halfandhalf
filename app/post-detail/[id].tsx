@@ -54,11 +54,6 @@ export default function PostDetailScreen() {
         router.back();
       }
     } catch (error: any) {
-        code: error.code,
-        message: error.message,
-        postId: postId,
-        userUid: auth.currentUser?.uid
-      });
       Alert.alert(i18n.t('common.error'), i18n.t('postDetail.loadError'));
       router.back();
     } finally {
