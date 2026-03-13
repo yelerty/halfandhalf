@@ -29,8 +29,8 @@ service cloud.firestore {
     match /posts/{postId} {
       // 모든 사용자가 읽기/생성/수정 가능
       allow read, write: if true;
-      // 게시글 소유자만 삭제 가능
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      // 게시글 소유자만 삭제 가능 (userId 필드 없으면 인증된 사용자는 누구나 삭제 가능)
+      allow delete: if isAuthenticated() && (!('userId' in resource.data) || request.auth.uid == resource.data.userId);
     }
 
     // chatSessions 컬렉션
