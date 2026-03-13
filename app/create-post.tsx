@@ -99,6 +99,13 @@ export default function CreatePostScreen() {
       return;
     }
 
+    // 디버깅: 사용자 정보 확인
+    console.log('현재 사용자:', {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+      isAnonymous: auth.currentUser.isAnonymous,
+    });
+
     try {
       setLoading(true);
       const currentUserId = auth.currentUser.uid;
