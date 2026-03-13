@@ -96,6 +96,9 @@ export const deleteChatSessionsForPost = async (postId: string) => {
     }
 
   } catch (error: any) {
-    throw error; // 게시글 삭제 전에 오류를 알리기 위해 throw
+    // 권한 에러는 무시하고 진행 (게시글 삭제는 계속)
+    if (error.code !== 'permission-denied') {
+      throw error;
+    }
   }
 };

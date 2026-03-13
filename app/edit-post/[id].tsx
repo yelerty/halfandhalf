@@ -162,15 +162,19 @@ export default function EditPostScreen() {
           onPress: async () => {
             try {
               setLoading(true);
+              console.log('게시글 삭제 시작:', { id, currentUserId: auth.currentUser?.uid });
+
               // 1. 관련 채팅 세션 삭제
               await deleteChatSessionsForPost(id);
 
               // 2. 게시글 삭제
               await deleteDoc(doc(db, 'posts', id));
 
+              console.log('게시글 삭제 성공');
               Alert.alert(i18n.t('common.success'), i18n.t('editPost.deleteSuccess'));
               router.back();
             } catch (error: any) {
+              console.error('게시글 삭제 실패:', error);
               Alert.alert(i18n.t('common.error'), error.message || '게시글 삭제 실패');
             } finally {
               setLoading(false);
