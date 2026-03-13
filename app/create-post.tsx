@@ -157,10 +157,11 @@ export default function CreatePostScreen() {
     try {
       setLoading(true);
       const currentUserId = auth.currentUser.uid;
-      // Anonymous users don't have email in Firebase Auth, so use placeholder
       const currentUserEmail = auth.currentUser.email || `anonymous-${currentUserId.substring(0, 8)}@app.local`;
 
-      await addDoc(collection(db, 'posts'), {
+      console.log('게시글 생성 시작:', { currentUserId, currentUserEmail });
+
+      const postData = {
         store: store.trim(),
         item: item.trim(),
         date: formatDate(date),
@@ -173,11 +174,21 @@ export default function CreatePostScreen() {
           longitude: location!.longitude,
         },
         createdAt: serverTimestamp(),
-      });
+      };
+
+      console.log('전송할 데이터:', postData);
+      const docRef = await addDoc(collection(db, 'posts'), postData);
+      console.log('게시글 생성 성공:', docRef.id);
+
+      // 히스토리에 매장명 저장
+      await saveStoreToHistory(store.trim());
+
       Alert.alert(i18n.t('common.success'), i18n.t('createPost.success'));
       router.back();
     } catch (error: any) {
-      Alert.alert(i18n.t('common.error'), error.message);
+      console.error('게시글 생성 실패:', error);
+      const errorMsg = error.code ? `[${error.code}] ${error.message}` : error.message;
+      Alert.alert(i18n.t('common.error'), errorMsg);
     } finally {
       setLoading(false);
     }
