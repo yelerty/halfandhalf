@@ -13,11 +13,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // 헬퍼 함수: 채팅 세션 참여자인지 확인
-    function isParticipant(participants) {
-      return isAuthenticated() && request.auth.uid in participants;
-    }
-
     // users 컬렉션: 본인 데이터만 읽기/쓰기 가능
     match /users/{userId} {
       allow read: if isOwner(userId);
