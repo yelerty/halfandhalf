@@ -8,19 +8,41 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import i18n from '../i18n';
 
+const MAX_STORE_HISTORY = 3;
+
 export default function CreatePostScreen() {
   const router = useRouter();
   const [store, setStore] = useState('');
   const [item, setItem] = useState('');
   const [date, setDate] = useState(new Date());
   const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(new Date());
+  const [endTime, setEndTime] = useState(() => {
+    const end = new Date();
+    end.setHours(end.getHours() + 2);
+    return end;
+  });
+  const [storeHistory, setStoreHistory] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // 매장 히스토리 로드
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('@store_history');
+        if (saved) {
+          setStoreHistory(JSON.parse(saved));
+        }
+      } catch (error) {
+        // 히스토리 로드 실패 - 무시
+      }
+    })();
+  }, []);
+
+  // 위치 정보 요청
   useEffect(() => {
     let isMounted = true;
 
@@ -46,6 +68,32 @@ export default function CreatePostScreen() {
       isMounted = false;
     };
   }, []);
+
+  // 시작시간이 변경되면 종료시간을 자동으로 +2시간 설정
+  const handleStartTimeChange = (selectedTime: Date) => {
+    setStartTime(selectedTime);
+    const newEndTime = new Date(selectedTime);
+    newEndTime.setHours(newEndTime.getHours() + 2);
+    setEndTime(newEndTime);
+  };
+
+  // 매장명 선택 시 히스토리에 저장
+  const handleStoreSelect = (selectedStore: string) => {
+    setStore(selectedStore);
+    saveStoreToHistory(selectedStore);
+  };
+
+  // 매장명을 히스토리에 저장
+  const saveStoreToHistory = async (storeName: string) => {
+    try {
+      const filtered = storeHistory.filter(s => s !== storeName);
+      const newHistory = [storeName, ...filtered].slice(0, MAX_STORE_HISTORY);
+      setStoreHistory(newHistory);
+      await AsyncStorage.setItem('@store_history', JSON.stringify(newHistory));
+    } catch (error) {
+      // 히스토리 저장 실패 - 무시
+    }
+  };
 
   const validateInputs = (): boolean => {
     const trimmedStore = store.trim();
@@ -146,6 +194,23 @@ export default function CreatePostScreen() {
           onChangeText={setStore}
         />
 
+        {storeHistory.length > 0 && (
+          <View style={styles.historyContainer}>
+            <Text style={styles.historyLabel}>최근 매장:</Text>
+            <View style={styles.historyButtons}>
+              {storeHistory.map((prevStore, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.historyButton}
+                  onPress={() => handleStoreSelect(prevStore)}
+                >
+                  <Text style={styles.historyButtonText}>{prevStore}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         <Text style={styles.label}>{i18n.t('createPost.item')}</Text>
         <TextInput
           style={styles.input}
@@ -200,7 +265,7 @@ export default function CreatePostScreen() {
             onChange={(event, selectedTime) => {
               setShowStartTimePicker(false);
               if (selectedTime) {
-                setStartTime(selectedTime);
+                handleStartTimeChange(selectedTime);
               }
             }}
           />
@@ -258,6 +323,33 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 16,
     color: '#333',
+  },
+  historyContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 6,
+  },
+  historyButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  historyButton: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  historyButtonText: {
+    color: '#2E7D32',
+    fontSize: 13,
+    fontWeight: '500',
   },
   button: {
     backgroundColor: '#4CAF50',
