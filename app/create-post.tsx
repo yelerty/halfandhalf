@@ -102,7 +102,8 @@ export default function CreatePostScreen() {
     try {
       setLoading(true);
       const currentUserId = auth.currentUser.uid;
-      const currentUserEmail = auth.currentUser.email;
+      // Anonymous users don't have email in Firebase Auth, so use placeholder
+      const currentUserEmail = auth.currentUser.email || `anonymous-${currentUserId.substring(0, 8)}@app.local`;
 
       await addDoc(collection(db, 'posts'), {
         store: store.trim(),

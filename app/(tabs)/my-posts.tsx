@@ -222,24 +222,39 @@ export default function MyPostsScreen() {
       const startDate = new Date(now.getTime());
       const endDate = new Date(now.getTime() + 60 * 60 * 1000); // 1시간 후
 
+      // 현재 사용자 정보 확인
+      const currentUserId = auth.currentUser.uid;
+      const currentUserEmail = auth.currentUser.email || `anonymous-${currentUserId.substring(0, 8)}@app.local`;
+
       // 임시 게시글 생성 (수정 화면으로 이동하기 위해)
       const tempPostRef = await addDoc(collection(db, 'posts'), {
-        store: archivedPost.store || '',
-        item: archivedPost.item || '',
+        store: archivedPost.store?.trim() || '',
+        item: archivedPost.item?.trim() || '',
         date: formatDate(now),
         startTime: formatTime(startDate),
         endTime: formatTime(endDate),
-        userId: auth.currentUser.uid,
-        userEmail: auth.currentUser.email || '',
-        location: location,
+        userId: currentUserId,
+        userEmail: currentUserEmail,
+        location: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        },
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
 
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
     } catch (error: any) {
-      Alert.alert(i18n.t('common.error'), error.message || '게시글 재등록 실패');
+      let errorMessage = error.message || '게시글 재등록 실패';
+
+      // Firebase 특정 에러 처리
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Firestore 권한 설정을 확인해주세요. 관리자에게 문의하세요.';
+      } else if (error.code === 'failed-precondition') {
+        errorMessage = 'Firestore이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.';
+      }
+
+      Alert.alert(i18n.t('common.error'), errorMessage);
     }
   };
 
