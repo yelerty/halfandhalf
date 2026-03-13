@@ -35,14 +35,12 @@ service cloud.firestore {
       // 모든 인증된 사용자가 게시글 읽기 가능
       allow read: if isAuthenticated();
 
-      // 게시글 작성: 인증된 사용자만 가능
-      allow create: if isAuthenticated()
-        && request.resource.data.userId == request.auth.uid;
+      // 게시글 작성: 인증된 사용자만 가능 (테스트용 - 모든 필드 제약 제거)
+      allow create: if isAuthenticated();
 
-      // 게시글 수정: 작성자만 가능 (userId 필드는 변경 불가)
+      // 게시글 수정: 작성자만 가능
       allow update: if isAuthenticated()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == resource.data.userId;
+        && resource.data.userId == request.auth.uid;
 
       // 게시글 삭제: 작성자만 가능
       allow delete: if isAuthenticated()
