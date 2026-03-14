@@ -52,19 +52,17 @@ service cloud.firestore {
 
       // 채팅 메시지 컬렉션
       match /messages/{messageId} {
-        // 참여자만 메시지 읽기 가능
-        allow read: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
+        // 인증된 사용자는 메시지 읽기 가능
+        allow read: if isAuthenticated();
 
-        // 참여자만 메시지 작성 가능
+        // 인증된 사용자가 자신의 메시지를 작성 가능
         allow create: if isAuthenticated()
-          && request.resource.data.senderId == request.auth.uid
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
+          && request.resource.data.senderId == request.auth.uid;
 
-        // 메시지 수정 금지, 삭제는 참여자만 가능
+        // 메시지 수정 금지, 삭제는 작성자만 가능
         allow update: if false;
         allow delete: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
+          && request.resource.data.senderId == request.auth.uid;
       }
     }
 
