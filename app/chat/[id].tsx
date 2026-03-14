@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
-    paddingBottom: 30,
+    paddingBottom: 12,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#ddd',

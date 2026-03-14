@@ -19,9 +19,11 @@ service cloud.firestore {
       allow write: if isOwner(userId);
 
       // 사용자별 채팅 세션 참조
-      // 본인만 읽기/쓰기/삭제 가능
+      // 본인만 읽기/삭제 가능, 쓰기는 본인 또는 sessionId가 일치하면 가능
       match /chatSessions/{sessionId} {
-        allow read, write, delete: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow write: if isOwner(userId)
+          || (isAuthenticated() && 'sessionId' in request.resource.data && request.resource.data.sessionId == sessionId);
       }
     }
 
@@ -55,17 +57,17 @@ service cloud.firestore {
       match /messages/{messageId} {
         // 참여자만 메시지 읽기 가능
         allow read: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants;
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
 
         // 참여자만 메시지 작성 가능
         allow create: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants
-          && request.resource.data.senderId == request.auth.uid;
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
 
         // 메시지 수정 금지, 삭제는 참여자만 가능
         allow update: if false;
         allow delete: if isAuthenticated()
-          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.participants;
+          && request.auth.uid in get(/databases/$(database)/documents/chatSessions/$(sessionId)).data.get('participants', []);
       }
     }
 
