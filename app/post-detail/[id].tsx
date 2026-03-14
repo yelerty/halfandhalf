@@ -50,8 +50,9 @@ export default function PostDetailScreen() {
           ...postDoc.data(),
         } as PostDetail);
       } else {
-        Alert.alert(i18n.t('common.error'), i18n.t('postDetail.notFound'));
-        router.back();
+        Alert.alert(i18n.t('common.error'), i18n.t('postDetail.notFound'), [
+          { text: i18n.t('common.confirm'), onPress: () => router.back() }
+        ]);
       }
     } catch (error: any) {
       Alert.alert(i18n.t('common.error'), i18n.t('postDetail.loadError'));

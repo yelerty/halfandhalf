@@ -98,8 +98,11 @@ export default function ChatScreen() {
               await deleteDoc(sessionDocRef);
               await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
             }
-            Alert.alert(i18n.t('common.confirm'), i18n.t('chat.postDeleted'));
-            router.back();
+            Alert.alert(
+              i18n.t('common.error'),
+              i18n.t('chat.postDeleted'),
+              [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]
+            );
           }
         } else if (postIdFromParams) {
           // 세션이 없지만 params에서 게시글 정보가 있으면 (새 채팅)
