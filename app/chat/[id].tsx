@@ -542,7 +542,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={50}
       >
         {postInfo && (
           <View style={styles.postInfo}>
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingHorizontal: 8,
     paddingTop: 16,
-    paddingBottom: 80,
+    paddingBottom: 16,
     flexGrow: 1,
     width: '100%',
   },
@@ -691,8 +691,8 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 12,
-    paddingBottom: 12,
+    padding: 8,
+    paddingBottom: 8,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#ddd',
@@ -706,10 +706,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     fontSize: 16,
     maxHeight: 120,
-    minHeight: 44,
+    minHeight: 40,
     textAlignVertical: 'top',
   },
   typingIndicator: {

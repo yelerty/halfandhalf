@@ -256,13 +256,9 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
   spacer: {
-    height: 20,
+    height: 0,
   },
   footer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
     backgroundColor: 'white',
     padding: 16,
     borderTopWidth: 1,
