@@ -108,7 +108,7 @@ export default function PostDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: post.store }} />
-      <ScrollView style={styles.container}>
+      <View style={styles.topWrapper}>
         <View style={styles.header}>
           <Text style={styles.storeName}>{post.store}</Text>
           <View style={styles.userInfo}>
@@ -172,6 +172,7 @@ export default function PostDetailScreen() {
 
         <View style={styles.spacer} />
       </ScrollView>
+      </View>
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.chatButton} onPress={handleStartChat}>
@@ -187,6 +188,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  topWrapper: {
+    flex: 1,
+    flexDirection: 'column',
   },
   header: {
     backgroundColor: 'white',

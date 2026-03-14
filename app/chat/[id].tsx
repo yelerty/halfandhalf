@@ -547,14 +547,39 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={50}
       >
-        {postInfo && (
-          <View style={styles.postInfo}>
-            <Ionicons name="cart" size={16} color="#666" />
-            <Text style={styles.postInfoText}>
-              {postInfo.userEmail} - {postInfo.startTime}~{postInfo.endTime}
-            </Text>
+        <View style={styles.topSection}>
+          {postInfo && (
+            <View style={styles.postInfo}>
+              <Ionicons name="cart" size={16} color="#666" />
+              <Text style={styles.postInfoText}>
+                {postInfo.userEmail} - {postInfo.startTime}~{postInfo.endTime}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder={i18n.t('chat.sendPlaceholder')}
+              value={message}
+              onChangeText={handleMessageChange}
+              multiline
+              maxLength={2000}
+            />
+            {partnerTyping && (
+              <Text style={styles.typingIndicator}>{i18n.t('chat.partnerTyping')}</Text>
+            )}
           </View>
-        )}
+          <TouchableOpacity
+            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!message.trim()}
+          >
+            <Ionicons name="send" size={20} color="white" />
+          </TouchableOpacity>
+          </View>
+        </View>
 
         <ScrollView
           ref={scrollViewRef}
@@ -583,29 +608,6 @@ export default function ChatScreen() {
             })
           )}
         </ScrollView>
-
-        <View style={styles.inputContainer}>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder={i18n.t('chat.sendPlaceholder')}
-              value={message}
-              onChangeText={handleMessageChange}
-              multiline
-              maxLength={2000}
-            />
-            {partnerTyping && (
-              <Text style={styles.typingIndicator}>{i18n.t('chat.partnerTyping')}</Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!message.trim()}
-          >
-            <Ionicons name="send" size={20} color="white" />
-          </TouchableOpacity>
-        </View>
       </KeyboardAvoidingView>
     </>
   );
@@ -615,6 +617,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  topSection: {
+    flexDirection: 'column',
   },
   postInfo: {
     flexDirection: 'row',
