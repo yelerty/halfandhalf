@@ -164,6 +164,11 @@ export default function CreatePostScreen() {
       return false;
     }
 
+    if (endTime <= startTime) {
+      Alert.alert(i18n.t('common.error'), '종료시간은 시작시간보다 늦어야 합니다.');
+      return false;
+    }
+
     if (!auth.currentUser) {
       Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
       return false;
