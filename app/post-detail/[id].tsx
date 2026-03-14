@@ -177,8 +177,6 @@ export default function PostDetailScreen() {
               <Text style={styles.chatButtonText}>{i18n.t('postDetail.startChat')}</Text>
             </TouchableOpacity>
           </View>
-
-          <View style={styles.spacer} />
         </ScrollView>
       </View>
     </>
@@ -270,7 +268,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
-    marginTop: 16,
   },
   chatButton: {
     backgroundColor: '#4CAF50',
