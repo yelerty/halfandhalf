@@ -37,9 +37,8 @@ service cloud.firestore {
 
     // chatSessions 컬렉션
     match /chatSessions/{sessionId} {
-      // 참여자만 채팅 세션 읽기 가능
-      allow read: if isAuthenticated()
-        && request.auth.uid in resource.data.get('participants', []);
+      // 인증된 사용자는 채팅 세션 읽기 가능
+      allow read: if isAuthenticated();
 
       // 인증된 사용자는 채팅 세션 생성/수정 가능
       allow create: if isAuthenticated();
