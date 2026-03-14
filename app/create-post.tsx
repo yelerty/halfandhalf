@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import i18n from '../i18n';
 
-const MAX_STORE_HISTORY = 3;
+const MAX_STORE_HISTORY = 2;
+const MAX_ITEM_HISTORY = 3;
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -22,6 +24,7 @@ export default function CreatePostScreen() {
     return end;
   });
   const [storeHistory, setStoreHistory] = useState<string[]>([]);
+  const [itemHistory, setItemHistory] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
@@ -35,6 +38,20 @@ export default function CreatePostScreen() {
         const saved = await AsyncStorage.getItem('@store_history');
         if (saved) {
           setStoreHistory(JSON.parse(saved));
+        }
+      } catch (error) {
+        // 히스토리 로드 실패 - 무시
+      }
+    })();
+  }, []);
+
+  // 물건 히스토리 로드
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('@item_history');
+        if (saved) {
+          setItemHistory(JSON.parse(saved));
         }
       } catch (error) {
         // 히스토리 로드 실패 - 무시
@@ -90,6 +107,24 @@ export default function CreatePostScreen() {
       const newHistory = [storeName, ...filtered].slice(0, MAX_STORE_HISTORY);
       setStoreHistory(newHistory);
       await AsyncStorage.setItem('@store_history', JSON.stringify(newHistory));
+    } catch (error) {
+      // 히스토리 저장 실패 - 무시
+    }
+  };
+
+  // 물건 선택 시 히스토리에 저장
+  const handleItemSelect = (selectedItem: string) => {
+    setItem(selectedItem);
+    saveItemToHistory(selectedItem);
+  };
+
+  // 물건을 히스토리에 저장
+  const saveItemToHistory = async (itemName: string) => {
+    try {
+      const filtered = itemHistory.filter(i => i !== itemName);
+      const newHistory = [itemName, ...filtered].slice(0, MAX_ITEM_HISTORY);
+      setItemHistory(newHistory);
+      await AsyncStorage.setItem('@item_history', JSON.stringify(newHistory));
     } catch (error) {
       // 히스토리 저장 실패 - 무시
     }
@@ -180,8 +215,9 @@ export default function CreatePostScreen() {
       const docRef = await addDoc(collection(db, 'posts'), postData);
       console.log('게시글 생성 성공:', docRef.id);
 
-      // 히스토리에 매장명 저장
+      // 히스토리에 매장명과 물건명 저장
       await saveStoreToHistory(store.trim());
+      await saveItemToHistory(item.trim());
 
       Alert.alert(i18n.t('common.success'), i18n.t('createPost.success'));
       router.back();
@@ -229,6 +265,23 @@ export default function CreatePostScreen() {
           value={item}
           onChangeText={setItem}
         />
+
+        {itemHistory.length > 0 && (
+          <View style={styles.historyContainer}>
+            <Text style={styles.historyLabel}>최근 물건:</Text>
+            <View style={styles.historyButtons}>
+              {itemHistory.map((prevItem, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.historyButton}
+                  onPress={() => handleItemSelect(prevItem)}
+                >
+                  <Text style={styles.historyButtonText}>{prevItem}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         <Text style={styles.label}>{i18n.t('createPost.date')}</Text>
         <TouchableOpacity
