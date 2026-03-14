@@ -109,7 +109,8 @@ export default function PostDetailScreen() {
     <>
       <Stack.Screen options={{ title: post.store }} />
       <View style={styles.topWrapper}>
-        <View style={styles.header}>
+        <ScrollView style={styles.container}>
+          <View style={styles.header}>
           <Text style={styles.storeName}>{post.store}</Text>
           <View style={styles.userInfo}>
             <Ionicons name="person-circle" size={40} color="#999" />
@@ -170,8 +171,8 @@ export default function PostDetailScreen() {
           </View>
         )}
 
-        <View style={styles.spacer} />
-      </ScrollView>
+          <View style={styles.spacer} />
+        </ScrollView>
       </View>
 
       <View style={styles.footer}>
