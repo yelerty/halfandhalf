@@ -39,19 +39,16 @@ service cloud.firestore {
     match /chatSessions/{sessionId} {
       // 참여자만 채팅 세션 읽기 가능
       allow read: if isAuthenticated()
-        && request.auth.uid in resource.data.participants;
+        && request.auth.uid in resource.data.get('participants', []);
 
-      // 참여자만 채팅 세션 생성/수정 가능
-      allow create: if isAuthenticated()
-        && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants.size() == 2;
+      // 인증된 사용자는 채팅 세션 생성/수정 가능
+      allow create: if isAuthenticated();
 
-      allow update: if isAuthenticated()
-        && request.auth.uid in resource.data.participants;
+      allow update: if isAuthenticated();
 
       // 참여자만 채팅 세션 삭제 가능
       allow delete: if isAuthenticated()
-        && request.auth.uid in resource.data.participants;
+        && request.auth.uid in resource.data.get('participants', []);
 
       // 채팅 메시지 컬렉션
       match /messages/{messageId} {
