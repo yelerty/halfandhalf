@@ -19,11 +19,11 @@ service cloud.firestore {
       allow write: if isOwner(userId);
 
       // 사용자별 채팅 세션 참조
-      // 본인만 읽기/삭제 가능, 쓰기는 본인 또는 sessionId가 일치하면 가능
+      // 본인만 읽기/삭제 가능, 인증된 사용자는 merge 쓰기 가능
       match /chatSessions/{sessionId} {
         allow read, delete: if isOwner(userId);
         allow write: if isOwner(userId)
-          || (isAuthenticated() && 'sessionId' in request.resource.data && request.resource.data.sessionId == sessionId);
+          || (isAuthenticated() && sessionId != null);
       }
     }
 

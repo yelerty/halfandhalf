@@ -171,15 +171,15 @@ export default function PostDetailScreen() {
           </View>
         )}
 
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.chatButton} onPress={handleStartChat}>
+              <Ionicons name="chatbubble" size={20} color="white" />
+              <Text style={styles.chatButtonText}>{i18n.t('postDetail.startChat')}</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.spacer} />
         </ScrollView>
-      </View>
-
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.chatButton} onPress={handleStartChat}>
-          <Ionicons name="chatbubble" size={20} color="white" />
-          <Text style={styles.chatButtonText}>{i18n.t('postDetail.startChat')}</Text>
-        </TouchableOpacity>
       </View>
     </>
   );
@@ -270,6 +270,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
+    marginTop: 16,
   },
   chatButton: {
     backgroundColor: '#4CAF50',
