@@ -34,29 +34,7 @@ export default function EditPostScreen() {
   }, [id]);
 
   const handleBackPress = () => {
-    if (isRepostMode) {
-      Alert.alert(
-        '게시글 재등록 취소',
-        '수정하지 않고 돌아가면 임시 게시글이 삭제됩니다.',
-        [
-          { text: '계속 수정', style: 'cancel' },
-          {
-            text: '삭제하고 돌아가기',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deleteDoc(doc(db, 'posts', id));
-                router.back();
-              } catch (error) {
-                router.back();
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      router.back();
-    }
+    router.back();
   };
 
   const loadPost = async () => {
