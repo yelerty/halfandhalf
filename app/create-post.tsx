@@ -64,20 +64,30 @@ export default function CreatePostScreen() {
     let isMounted = true;
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        if (isMounted) {
-          Alert.alert(i18n.t('common.error'), i18n.t('createPost.permissionRequired'));
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (isMounted) {
+            Alert.alert(i18n.t('common.error'), i18n.t('createPost.permissionRequired'));
+          }
+          return;
         }
-        return;
-      }
 
-      const loc = await Location.getCurrentPositionAsync({});
-      if (isMounted) {
-        setLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
+        const loc = await Location.getCurrentPositionAsync({});
+        if (isMounted) {
+          setLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      } catch (error) {
+        if (isMounted) {
+          Alert.alert(
+            i18n.t('common.error'),
+            '위치 정보를 가져올 수 없습니다. 기기의 위치 서비스를 확인해주세요.',
+            [{ text: i18n.t('common.confirm'), onPress: () => {} }]
+          );
+        }
       }
     })();
 
