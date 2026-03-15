@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -616,9 +616,13 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={50}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 180 : 100}
       >
-        <View style={styles.topSection}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messages}
+          contentContainerStyle={styles.messagesContent}
+        >
           {postInfo && (
             <View style={styles.postInfo}>
               <Ionicons name="cart" size={16} color="#666" />
@@ -628,35 +632,6 @@ export default function ChatScreen() {
             </View>
           )}
 
-          <View style={styles.inputContainer}>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder={i18n.t('chat.sendPlaceholder')}
-              value={message}
-              onChangeText={handleMessageChange}
-              multiline
-              maxLength={2000}
-            />
-            {partnerTyping && (
-              <Text style={styles.typingIndicator}>{i18n.t('chat.partnerTyping')}</Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!message.trim()}
-          >
-            <Ionicons name="send" size={20} color="white" />
-          </TouchableOpacity>
-          </View>
-        </View>
-
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.messages}
-          contentContainerStyle={styles.messagesContent}
-        >
           {messages.length === 0 ? (
             <Text style={styles.emptyText}>{i18n.t('chat.emptyMessage')}</Text>
           ) : (
@@ -679,6 +654,31 @@ export default function ChatScreen() {
             })
           )}
         </ScrollView>
+
+        <SafeAreaView edges={['bottom']} style={styles.safeInputContainer}>
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder={i18n.t('chat.sendPlaceholder')}
+                value={message}
+                onChangeText={handleMessageChange}
+                multiline
+                maxLength={2000}
+              />
+              {partnerTyping && (
+                <Text style={styles.typingIndicator}>{i18n.t('chat.partnerTyping')}</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!message.trim()}
+            >
+              <Ionicons name="send" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </KeyboardAvoidingView>
     </>
   );
@@ -766,10 +766,13 @@ const styles = StyleSheet.create({
       ios: {},
     }),
   },
+  safeInputContainer: {
+    backgroundColor: 'white',
+    paddingBottom: 20,
+  },
   inputContainer: {
     flexDirection: 'row',
     padding: 8,
-    paddingBottom: 8,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#ddd',
