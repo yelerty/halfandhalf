@@ -16,8 +16,10 @@ interface Message {
 }
 
 export default function ChatScreen() {
+  console.log('🔵 ChatScreen component mounted');
   const params = useLocalSearchParams();
   const sessionIdFromParams = Array.isArray(params.id) ? params.id[0] : params.id;
+  console.log('🔵 sessionIdFromParams:', sessionIdFromParams);
 
   // params에서 게시글 정보 추출 (새 채팅인 경우)
   const postIdFromParams = Array.isArray(params.postId) ? params.postId[0] : params.postId;
@@ -41,14 +43,21 @@ export default function ChatScreen() {
 
   // 채팅 세션 정보 가져오기 또는 params에서 설정
   useEffect(() => {
+    console.log('🟡 useEffect 1 (loadChatSession) triggered');
     let isMounted = true;
 
     const loadChatSession = async () => {
+      console.log('🟡 loadChatSession called');
       if (!sessionIdFromParams || !auth.currentUser) {
+        console.log('Chat session load skipped: missing sessionId or auth', {
+          sessionIdFromParams,
+          hasUser: !!auth.currentUser,
+        });
         return;
       }
 
       try {
+        console.log('Loading chat session:', { sessionIdFromParams, currentUserId: auth.currentUser.uid });
         // 먼저 기존 세션이 있는지 확인
         const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
         const sessionDoc = await getDoc(sessionDocRef);
@@ -56,6 +65,7 @@ export default function ChatScreen() {
         if (!isMounted) return;
 
         if (sessionDoc.exists()) {
+          console.log('Chat session exists, setting sessionExists=true');
           // 기존 세션이 있으면 사용
           setSessionExists(true);
           const sessionData = sessionDoc.data();
@@ -68,6 +78,11 @@ export default function ChatScreen() {
 
           if (postDoc.exists()) {
             const postData = { id: postDoc.id, ...postDoc.data() };
+            console.log('Post data loaded:', {
+              postId: postData.id,
+              userId: postData.userId,
+              store: postData.store,
+            });
             setPostInfo(postData);
 
             // 자신의 채팅 세션 참조 확인 및 생성
@@ -105,6 +120,7 @@ export default function ChatScreen() {
             );
           }
         } else if (postIdFromParams) {
+          console.log('Chat session does not exist yet, setting sessionExists=false');
           // 세션이 없지만 params에서 게시글 정보가 있으면 (새 채팅)
           setSessionExists(false);
           setPostInfo({
@@ -140,16 +156,22 @@ export default function ChatScreen() {
       }
     };
 
+    console.log('🟡 Calling loadChatSession');
     loadChatSession();
 
     return () => {
+      console.log('🟡 useEffect 1 cleanup');
       isMounted = false;
     };
   }, [sessionIdFromParams]);
 
   // 상대방이 나간 것을 감지하고 입력 중 상태를 감시하는 useEffect
   useEffect(() => {
-    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
+    console.log('🟠 useEffect 2 (partner left detection) triggered');
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) {
+      console.log('🟠 Partner detection skipped:', { sessionIdFromParams, hasUser: !!auth.currentUser, sessionExists });
+      return;
+    }
 
     const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
 
@@ -212,8 +234,22 @@ export default function ChatScreen() {
 
   // 메시지 실시간 구독 (세션이 존재할 때만)
   useEffect(() => {
-    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) return;
+    console.log('🟢 useEffect 3 (message subscription) triggered');
+    console.log('🟢 Conditions check:', {
+      sessionIdFromParams: !!sessionIdFromParams,
+      hasUser: !!auth.currentUser,
+      sessionExists,
+    });
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) {
+      console.log('Message subscription skipped:', {
+        sessionIdFromParams,
+        hasUser: !!auth.currentUser,
+        sessionExists,
+      });
+      return;
+    }
 
+    console.log('Setting up message subscription for:', sessionIdFromParams);
     const currentUserId = auth.currentUser.uid;
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
@@ -221,11 +257,19 @@ export default function ChatScreen() {
     const unsubscribe = onSnapshot(
       q,
       async (snapshot) => {
+        console.log('Message subscription fired, got', snapshot.docs.length, 'messages');
         const messagesData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Message[];
 
+        console.log('Setting messages. Count:', messagesData.length);
+        if (messagesData.length > 0) {
+          console.log('All messages:');
+          messagesData.forEach((msg, idx) => {
+            console.log(`  [${idx}] id=${msg.id?.substring(0, 8)}, sender=${msg.senderId?.substring(0, 8)}, text=${msg.text?.substring(0, 20)}`);
+          });
+        }
         setMessages(messagesData);
 
         // 첫 구독 시에만 읽음 처리 (중복 방지)
@@ -258,6 +302,10 @@ export default function ChatScreen() {
         }, 100);
       },
       (error) => {
+        console.error('Message subscription error:', {
+          code: error.code,
+          message: error.message,
+        });
         if (error.code === 'permission-denied') {
           // 세션이 삭제되었거나 권한이 없음
           Alert.alert(
@@ -285,8 +333,14 @@ export default function ChatScreen() {
       return;
     }
 
+    console.log('Sending message. sessionExists:', sessionExists, 'sessionId:', sessionIdFromParams);
     const currentUserId = auth.currentUser.uid;
+    console.log('Sender info:', {
+      currentUserId: currentUserId.substring(0, 8),
+      postOwnerId: postInfo.userId?.substring(0, 8),
+    });
     const participants = [currentUserId, postInfo.userId].sort();
+    console.log('Message participants:', participants);
 
     // 낙관적 업데이트: 로컬 상태에 임시 메시지 추가
     const tempMessageId = 'temp-' + Date.now();
@@ -303,6 +357,13 @@ export default function ChatScreen() {
     try {
       // 세션이 없으면 먼저 생성
       if (!sessionExists) {
+        console.log('Creating new chat session:', {
+          sessionIdFromParams,
+          postId: postInfo.id,
+          participants,
+          currentUserId: currentUserId.substring(0, 8),
+          postOwnerId: postInfo.userId.substring(0, 8),
+        });
         // 1. 채팅 세션 생성
         await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
@@ -314,6 +375,7 @@ export default function ChatScreen() {
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
         });
+        console.log('Chat session created successfully');
 
         // 2. 내 채팅 세션 참조 생성
         await setDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams), {
@@ -328,17 +390,24 @@ export default function ChatScreen() {
 
         // 3. 상대방 채팅 세션 참조도 생성 (merge로 안전하게)
         // 첫 메시지이므로 상대방의 unreadCount는 1
-        await setDoc(doc(db, 'users', postInfo.userId, 'chatSessions', sessionIdFromParams), {
-          postId: postInfo.id,
-          postStore: postInfo.store,
-          postItem: postInfo.item,
-          sessionId: sessionIdFromParams,
-          active: true,
-          unreadCount: 1,
-          lastMessageAt: serverTimestamp(),
-          lastMessage: messageText,
-          joinedAt: serverTimestamp(),
-        }, { merge: true });
+        console.log('Creating other user session reference for:', postInfo.userId);
+        try {
+          await setDoc(doc(db, 'users', postInfo.userId, 'chatSessions', sessionIdFromParams), {
+            postId: postInfo.id,
+            postStore: postInfo.store,
+            postItem: postInfo.item,
+            sessionId: sessionIdFromParams,
+            active: true,
+            unreadCount: 1,
+            lastMessageAt: serverTimestamp(),
+            lastMessage: messageText,
+            joinedAt: serverTimestamp(),
+          }, { merge: true });
+          console.log('Other user session reference created successfully');
+        } catch (refError) {
+          console.error('Error creating other user session reference:', refError);
+          // Continue anyway - message will still be created
+        }
 
         setSessionExists(true);
       } else {
@@ -368,12 +437,14 @@ export default function ChatScreen() {
       }
 
       // 메시지 저장
+      console.log('Adding message to collection:', sessionIdFromParams);
       const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
       const docRef = await addDoc(messagesCollectionRef, {
         text: messageText,
         senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
+      console.log('Message saved successfully:', docRef.id);
 
       // 상대방의 unreadCount 증가
       const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
@@ -655,9 +726,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: Platform.OS === 'android' ? '65%' : '75%',
+    maxWidth: '95%',
     alignSelf: 'flex-start',
-    overflow: 'hidden',
+    flexShrink: 1,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -665,9 +736,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 8,
-    maxWidth: Platform.OS === 'android' ? '65%' : '75%',
+    maxWidth: '95%',
     alignSelf: 'flex-end',
-    overflow: 'hidden',
+    flexShrink: 1,
   },
   messageText: {
     fontSize: 16,
@@ -678,7 +749,6 @@ const styles = StyleSheet.create({
     ...Platform.select({
       android: {
         includeFontPadding: false,
-        marginRight: 4,
       },
       ios: {},
     }),
@@ -692,7 +762,6 @@ const styles = StyleSheet.create({
     ...Platform.select({
       android: {
         includeFontPadding: false,
-        marginLeft: 4,
       },
       ios: {},
     }),
