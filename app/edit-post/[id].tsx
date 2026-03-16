@@ -59,6 +59,22 @@ export default function EditPostScreen() {
     setItems(newItems);
   };
 
+  // 시작시간이 변경되면 종료시간을 자동으로 +2시간 설정
+  // 종료시간이 자정을 넘어가면 시작 날짜를 다음날로 자동 설정
+  const handleStartTimeChange = (selectedTime: Date) => {
+    setStartTime(selectedTime);
+    const newEndTime = new Date(selectedTime);
+    newEndTime.setHours(newEndTime.getHours() + 2);
+    setEndTime(newEndTime);
+
+    // 종료시간이 다음날(자정 이후)로 넘어가면 시작 날짜를 다음날로 설정
+    if (newEndTime.getDate() > selectedTime.getDate()) {
+      const newDate = new Date(date);
+      newDate.setDate(newDate.getDate() + 1);
+      setDate(newDate);
+    }
+  };
+
   const loadPost = async () => {
     if (!id) {
       Alert.alert(i18n.t('common.error'), 'Invalid post ID');
@@ -316,7 +332,7 @@ export default function EditPostScreen() {
             onChange={(event, selectedTime) => {
               setShowStartTimePicker(false);
               if (selectedTime) {
-                setStartTime(selectedTime);
+                handleStartTimeChange(selectedTime);
               }
             }}
           />

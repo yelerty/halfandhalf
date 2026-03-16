@@ -99,11 +99,19 @@ export default function CreatePostScreen() {
   }, []);
 
   // 시작시간이 변경되면 종료시간을 자동으로 +2시간 설정
+  // 종료시간이 자정을 넘어가면 시작 날짜를 다음날로 자동 설정
   const handleStartTimeChange = (selectedTime: Date) => {
     setStartTime(selectedTime);
     const newEndTime = new Date(selectedTime);
     newEndTime.setHours(newEndTime.getHours() + 2);
     setEndTime(newEndTime);
+
+    // 종료시간이 다음날(자정 이후)로 넘어가면 시작 날짜를 다음날로 설정
+    if (newEndTime.getDate() > selectedTime.getDate()) {
+      const newDate = new Date(date);
+      newDate.setDate(newDate.getDate() + 1);
+      setDate(newDate);
+    }
   };
 
   // 매장명 선택 시 히스토리에 저장
