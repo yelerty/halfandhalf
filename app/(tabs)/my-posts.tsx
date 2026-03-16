@@ -243,13 +243,15 @@ export default function MyPostsScreen() {
         tempPostData.item = archivedPost.item?.trim() || '';
       }
 
-      // date가 있으면 포함
-      if (archivedPost.date) {
-        tempPostData.date = archivedPost.date;
+      // date가 있거나 startTime이 있으면 포함 (시간 설정이 있었던 게시글)
+      if (archivedPost.date || archivedPost.startTime) {
+        if (archivedPost.date) {
+          tempPostData.date = archivedPost.date;
+        }
+        tempPostData.startTime = formatTime(startDate);
+        tempPostData.endTime = formatTime(endDate);
       }
-
-      tempPostData.startTime = formatTime(startDate);
-      tempPostData.endTime = formatTime(endDate);
+      // 시간 설정이 없었던 게시글은 시간 필드도 저장하지 않음
 
       const tempPostRef = await addDoc(collection(db, 'posts'), tempPostData);
 

@@ -150,9 +150,10 @@ export default function EditPostScreen() {
       // 날짜/시간이 활성화된 경우에만 저장
       if (hasDateTime) {
         updateData.date = formatDate(date);
+        updateData.startTime = formatTime(startTime);
+        updateData.endTime = formatTime(endTime);
       }
-      updateData.startTime = formatTime(startTime);
-      updateData.endTime = formatTime(endTime);
+      // hasDateTime이 false면 시간 필드를 아예 저장하지 않음
 
       // 게시글 업데이트
       await updateDoc(doc(db, 'posts', id), updateData);

@@ -37,9 +37,15 @@ export function parseTime(timeStr: string): Date {
 
 /**
  * 게시글의 만료 여부를 확인
+ * 시간 정보가 없으면 만료되지 않은 것으로 간주 (시간 미설정 공동구매)
  */
-export function isPostExpired(post: { date?: string; endTime: string }): boolean {
+export function isPostExpired(post: { date?: string; endTime?: string }): boolean {
   const now = new Date();
+
+  // endTime이 없으면 만료되지 않은 것으로 간주 (시간 설정 없이 등록된 공동구매)
+  if (!post.endTime) {
+    return false;
+  }
 
   if (post.date && post.endTime) {
     const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);

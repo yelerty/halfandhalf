@@ -267,10 +267,8 @@ export default function CreatePostScreen() {
         postData.date = formatDate(date);
         postData.startTime = formatTime(startTime);
         postData.endTime = formatTime(endTime);
-      } else {
-        postData.startTime = formatTime(startTime);
-        postData.endTime = formatTime(endTime);
       }
+      // hasDateTime이 false면 시간 필드를 아예 저장하지 않음
 
       console.log('전송할 데이터:', postData);
       const docRef = await addDoc(collection(db, 'posts'), postData);
