@@ -14,6 +14,7 @@ interface Post {
   id: string;
   store: string;
   item: string;
+  items?: string[];
   date?: string;
   startTime: string;
   endTime: string;
@@ -223,12 +224,8 @@ export default function MyPostsScreen() {
       const currentUserEmail = auth.currentUser.email || `anonymous-${currentUserId.substring(0, 8)}@app.local`;
 
       // 임시 게시글 생성 (수정 화면으로 이동하기 위해)
-      const tempPostRef = await addDoc(collection(db, 'posts'), {
+      const tempPostData: any = {
         store: archivedPost.store?.trim() || '',
-        item: archivedPost.item?.trim() || '',
-        date: formatDate(now),
-        startTime: formatTime(startDate),
-        endTime: formatTime(endDate),
         userId: currentUserId,
         userEmail: currentUserEmail,
         location: {
@@ -236,7 +233,25 @@ export default function MyPostsScreen() {
           longitude: location.longitude,
         },
         createdAt: serverTimestamp(),
-      });
+      };
+
+      // items 배열이 있으면 사용, 없으면 item 필드 사용
+      if (archivedPost.items && Array.isArray(archivedPost.items)) {
+        tempPostData.items = archivedPost.items;
+        tempPostData.item = archivedPost.items[0];
+      } else {
+        tempPostData.item = archivedPost.item?.trim() || '';
+      }
+
+      // date가 있으면 포함
+      if (archivedPost.date) {
+        tempPostData.date = archivedPost.date;
+      }
+
+      tempPostData.startTime = formatTime(startDate);
+      tempPostData.endTime = formatTime(endDate);
+
+      const tempPostRef = await addDoc(collection(db, 'posts'), tempPostData);
 
       // 수정 화면으로 이동 (재등록 모드로)
       router.push(`/edit-post/${tempPostRef.id}?repost=true&archivedId=${archivedPost.id}`);
@@ -333,7 +348,7 @@ export default function MyPostsScreen() {
                 <Text style={styles.cardTime}>
                   {post.startTime} - {post.endTime}
                 </Text>
-                <Text style={styles.cardItem}>{post.item}</Text>
+                <Text style={styles.cardItem}>{post.items?.join(', ') || post.item}</Text>
                 <Text style={styles.expiredText}>
                   {i18n.t('myPosts.expired')}: {new Date(post.expiredAt || '').toLocaleDateString()}
                 </Text>
@@ -366,7 +381,7 @@ export default function MyPostsScreen() {
                 <Text style={styles.cardTime}>
                   {post.startTime} - {post.endTime}
                 </Text>
-                <Text style={styles.cardItem}>{post.item}</Text>
+                <Text style={styles.cardItem}>{post.items?.join(', ') || post.item}</Text>
                 <View style={styles.editIndicator}>
                   <Ionicons name="pencil-outline" size={16} color="#4CAF50" />
                   <Text style={styles.editText}>{i18n.t('myPosts.editPost')}</Text>

@@ -53,3 +53,56 @@ export function isPostExpired(post: { date?: string; endTime: string }): boolean
 
   return false;
 }
+
+/**
+ * FirestoreTimestamp를 Date로 변환 (Timestamp 인스턴스, plain object, Date 모두 처리)
+ */
+export function toDate(ts: any): Date {
+  if (!ts) return new Date();
+  if (ts instanceof Date) return ts;
+  if (typeof ts.toDate === 'function') return ts.toDate();
+  if (ts.seconds) return new Date(ts.seconds * 1000);
+  return new Date();
+}
+
+/**
+ * 메시지 타임스탬프: "오전 9:42" / "오후 3:42"
+ */
+export function formatMessageTime(ts: any): string {
+  const date = toDate(ts);
+  return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * 같은 날인지 확인
+ */
+export function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+}
+
+/**
+ * 날짜 그룹 라벨: "오늘", "어제", "2025년 3월 16일"
+ */
+export function getDateGroupLabel(ts: any): string {
+  const date = toDate(ts);
+  const now = new Date();
+  if (isSameDay(date, now)) return '오늘';
+  if (isSameDay(date, new Date(now.getTime() - 86400000))) return '어제';
+  return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * 채팅 목록 시간: 오늘→"HH:MM", 어제→"어제", 그외→"M/D"
+ */
+export function formatChatListTime(ts: any): string {
+  if (!ts) return '';
+  const date = toDate(ts);
+  const now = new Date();
+  const isToday = isSameDay(date, now);
+  const isYesterday = isSameDay(date, new Date(now.getTime() - 86400000));
+  if (isToday) return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  if (isYesterday) return '어제';
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}

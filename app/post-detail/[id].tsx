@@ -10,6 +10,7 @@ interface PostDetail {
   id: string;
   store: string;
   item: string;
+  items?: string[];
   date?: string;
   startTime: string;
   endTime: string;
@@ -123,13 +124,28 @@ export default function PostDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{i18n.t('postDetail.itemInfo')}</Text>
-          <View style={styles.infoRow}>
-            <Ionicons name="cube" size={20} color="#666" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>{i18n.t('postDetail.item')}</Text>
-              <Text style={styles.infoValue}>{post.item}</Text>
+          {post.items && post.items.length > 0 ? (
+            post.items.map((item, index) => {
+              const itemsLength = post.items?.length || 0;
+              return (
+                <View key={index} style={styles.infoRow}>
+                  <Ionicons name="cube" size={20} color="#666" />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>{i18n.t('postDetail.item')} {itemsLength > 1 ? `(${index + 1})` : ''}</Text>
+                    <Text style={styles.infoValue}>{item}</Text>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.infoRow}>
+              <Ionicons name="cube" size={20} color="#666" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>{i18n.t('postDetail.item')}</Text>
+                <Text style={styles.infoValue}>{post.item}</Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
 
         <View style={styles.section}>

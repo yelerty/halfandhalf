@@ -1,10 +1,12 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView, Pressable } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import * as Clipboard from 'expo-clipboard';
 import { db, auth } from '../../config/firebase';
 import { FirestoreTimestamp, getErrorMessage } from '../../utils/types';
+import { formatMessageTime, getDateGroupLabel, isSameDay, toDate } from '../../utils/dateUtils';
 import i18n from '../../i18n';
 
 interface Message {
@@ -134,8 +136,19 @@ export default function ChatScreen() {
           });
         } else {
           // 세션도 없고 params도 없으면 에러
-          Alert.alert(i18n.t('common.confirm'), i18n.t('chat.sessionNotFound'));
-          router.back();
+          // 사용자의 chatSessions 참조 삭제
+          if (auth.currentUser) {
+            try {
+              await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
+            } catch (error) {
+              // 삭제 실패 무시
+            }
+          }
+          Alert.alert(
+            i18n.t('common.error'),
+            i18n.t('chat.sessionNotFound'),
+            [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]
+          );
         }
       } catch (error: any) {
         // permission-denied는 세션이 아직 없는 정상 케이스
@@ -526,6 +539,15 @@ export default function ChatScreen() {
     }
   };
 
+  const handleCopyMessage = async (text: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert('', '메시지가 복사되었습니다.');
+    } catch (error) {
+      Alert.alert('', '메시지 복사에 실패했습니다.');
+    }
+  };
+
   const handleLeaveChat = () => {
     if (!sessionIdFromParams || !postInfo || !auth.currentUser) {
       router.back();
@@ -616,7 +638,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 180 : 100}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 180 : 150}
       >
         <ScrollView
           ref={scrollViewRef}
@@ -627,7 +649,7 @@ export default function ChatScreen() {
             <View style={styles.postInfo}>
               <Ionicons name="cart" size={16} color="#666" />
               <Text style={styles.postInfoText}>
-                {postInfo.userEmail} - {postInfo.startTime}~{postInfo.endTime}
+                {postInfo.userEmail?.substring(0, 2)}*** - {postInfo.startTime}~{postInfo.endTime}
               </Text>
             </View>
           )}
@@ -637,18 +659,34 @@ export default function ChatScreen() {
           ) : (
             messages.map((msg, index) => {
               const isSelf = msg.senderId === auth.currentUser?.uid;
+              const msgDate = toDate(msg.createdAt);
+              const prevMsg = messages[index - 1];
+              const showDateSeparator = index === 0 || !isSameDay(msgDate, toDate(prevMsg.createdAt));
+
               return (
-                <View
-                  key={msg.id}
-                  style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
-                >
-                  <Text
-                    style={isSelf ? styles.messageTextSelf : styles.messageText}
-                    numberOfLines={0}
-                    allowFontScaling={false}
+                <View key={msg.id}>
+                  {showDateSeparator && (
+                    <View style={styles.dateSeparator}>
+                      <Text style={styles.dateSeparatorText}>{getDateGroupLabel(msg.createdAt)}</Text>
+                    </View>
+                  )}
+                  <Pressable
+                    style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
+                    onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    {msg.text}
-                  </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={isSelf ? styles.messageTextSelf : styles.messageText}
+                        numberOfLines={0}
+                        allowFontScaling={false}
+                      >
+                        {msg.text}
+                      </Text>
+                      <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
+                        {formatMessageTime(msg.createdAt)}
+                      </Text>
+                    </View>
+                  </Pressable>
                 </View>
               );
             })
@@ -729,6 +767,7 @@ const styles = StyleSheet.create({
     maxWidth: '95%',
     alignSelf: 'flex-start',
     flexShrink: 1,
+    marginTop: 4,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -739,6 +778,19 @@ const styles = StyleSheet.create({
     maxWidth: '95%',
     alignSelf: 'flex-end',
     flexShrink: 1,
+    marginTop: 4,
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateSeparatorText: {
+    fontSize: 13,
+    color: '#999',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   messageText: {
     fontSize: 16,
@@ -765,6 +817,18 @@ const styles = StyleSheet.create({
       },
       ios: {},
     }),
+  },
+  timestampSelf: {
+    fontSize: 12,
+    color: '#e0e0e0',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  timestampOther: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'left',
   },
   safeInputContainer: {
     backgroundColor: 'white',

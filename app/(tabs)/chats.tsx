@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import { FirestoreTimestamp } from '../../utils/types';
+import { formatChatListTime } from '../../utils/dateUtils';
 import i18n from '../../i18n';
 
 interface ChatSession {
@@ -150,7 +151,10 @@ export default function ChatsScreen() {
                   )}
                 </View>
                 <View style={styles.chatInfo}>
-                  <Text style={styles.postTitle}>{session.postTitle}</Text>
+                  <View style={styles.chatHeader}>
+                    <Text style={styles.postTitle}>{session.postTitle}</Text>
+                    <Text style={styles.lastMessageTime}>{formatChatListTime(session.lastMessageTime)}</Text>
+                  </View>
                   <Text style={styles.lastMessage} numberOfLines={1}>
                     {session.lastMessage}
                   </Text>
@@ -250,11 +254,22 @@ const styles = StyleSheet.create({
   chatInfo: {
     flex: 1,
   },
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   postTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
     color: '#333',
+    flex: 1,
+  },
+  lastMessageTime: {
+    fontSize: 13,
+    color: '#999',
+    marginLeft: 8,
   },
   lastMessage: {
     fontSize: 14,

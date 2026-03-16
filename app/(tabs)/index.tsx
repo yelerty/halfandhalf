@@ -17,6 +17,7 @@ interface Post {
   id: string;
   store: string;
   item: string;
+  items?: string[];
   date?: string;
   startTime: string;
   endTime: string;
@@ -350,7 +351,7 @@ export default function HomeScreen() {
               <Text style={styles.cardTime}>
                 {post.startTime} - {post.endTime}
               </Text>
-              <Text style={styles.cardItem}>{post.item}</Text>
+              <Text style={styles.cardItem}>{post.items?.join(', ') || post.item}</Text>
               <Text style={styles.cardUser}>{post.userEmail}</Text>
               <View style={styles.chatIndicator}>
                 <Ionicons name="arrow-forward" size={16} color="#4CAF50" />
