@@ -589,51 +589,47 @@ export default function ChatScreen() {
 
             try {
               const currentUserId = auth.currentUser.uid;
-
-              // 1. chatSessions 문서의 activeParticipants에서 자신 제거
               const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
               const sessionDoc = await getDoc(sessionDocRef);
 
               if (sessionDoc.exists()) {
                 const currentActiveParticipants = sessionDoc.data()?.activeParticipants || [];
-                const updatedActiveParticipants = currentActiveParticipants.filter((id: string) => id !== currentUserId);
-                const otherUserId = updatedActiveParticipants.length > 0 ? updatedActiveParticipants[0] : null;
+                const otherUserId = currentActiveParticipants.find((id: string) => id !== currentUserId);
 
-                // 상대방도 이미 나갔다면 세션 전체 삭제
-                if (updatedActiveParticipants.length === 0) {
-                  // 메시지 삭제
-                  const messagesSnapshot = await getDocs(
-                    collection(db, 'chatSessions', sessionIdFromParams, 'messages')
-                  );
-                  const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                  await Promise.all(deletePromises);
+                // 한명이 나가면 세션 전체 삭제 (상대방 활성 여부 상관없이)
+                console.log('Leaving chat - deleting session:', {
+                  sessionId: sessionIdFromParams,
+                  currentUserId: currentUserId.substring(0, 8),
+                  otherUserId: otherUserId?.substring(0, 8),
+                });
 
-                  // 세션 문서 삭제
-                  await deleteDoc(sessionDocRef);
+                // 1. 모든 메시지 삭제
+                const messagesSnapshot = await getDocs(
+                  collection(db, 'chatSessions', sessionIdFromParams, 'messages')
+                );
+                const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                console.log(`Deleted ${messagesSnapshot.docs.length} messages`);
 
-                  // 양쪽 사용자의 chatSessions 참조 삭제
-                  try {
-                    await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
-                  } catch (e) {
-                    // 이미 삭제된 경우 무시
-                  }
+                // 2. 세션 문서 삭제
+                await deleteDoc(sessionDocRef);
+                console.log('Deleted session document');
 
-                  if (otherUserId) {
-                    try {
-                      await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
-                    } catch (e) {
-                      // 이미 삭제된 경우 무시
-                    }
-                  }
-                } else if (otherUserId) {
-                  // 상대방은 여전히 참여 중 - 자신만 제거 및 사용자 참조만 삭제
-                  // 입력 중 상태도 함께 해제
-                  await setDoc(sessionDocRef, {
-                    activeParticipants: updatedActiveParticipants,
-                    typingBy: null,
-                  }, { merge: true });
-
+                // 3. 양쪽 사용자의 chatSessions 참조 삭제
+                try {
                   await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
+                  console.log('Deleted current user session reference');
+                } catch (e) {
+                  console.log('Current user session reference already deleted');
+                }
+
+                if (otherUserId) {
+                  try {
+                    await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
+                    console.log('Deleted other user session reference');
+                  } catch (e) {
+                    console.log('Other user session reference already deleted');
+                  }
                 }
               }
 
