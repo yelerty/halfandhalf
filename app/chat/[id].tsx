@@ -368,8 +368,24 @@ export default function ChatScreen() {
     setMessage(''); // 입력창 즉시 초기화
 
     try {
+      // 세션 존재 여부를 실시간으로 재확인
+      // (양쪽 모두 나가서 삭제된 경우를 대비)
+      let actualSessionExists = sessionExists;
+      try {
+        const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+        const sessionDoc = await getDoc(sessionDocRef);
+        actualSessionExists = sessionDoc.exists();
+
+        // 상태 동기화
+        if (actualSessionExists !== sessionExists) {
+          setSessionExists(actualSessionExists);
+        }
+      } catch (checkError) {
+        console.log('Error checking session existence:', checkError);
+      }
+
       // 세션이 없으면 먼저 생성
-      if (!sessionExists) {
+      if (!actualSessionExists) {
         console.log('Creating new chat session:', {
           sessionIdFromParams,
           postId: postInfo.id,
