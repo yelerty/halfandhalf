@@ -573,7 +573,6 @@ export default function ChatScreen() {
 
             try {
               const currentUserId = auth.currentUser.uid;
-              const otherUserId = postInfo.userId === currentUserId ? postInfo.userId : postInfo.userId;
 
               // 1. chatSessions 문서의 activeParticipants에서 자신 제거
               const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
@@ -582,6 +581,7 @@ export default function ChatScreen() {
               if (sessionDoc.exists()) {
                 const currentActiveParticipants = sessionDoc.data()?.activeParticipants || [];
                 const updatedActiveParticipants = currentActiveParticipants.filter((id: string) => id !== currentUserId);
+                const otherUserId = updatedActiveParticipants.length > 0 ? updatedActiveParticipants[0] : null;
 
                 // 상대방도 이미 나갔다면 세션 전체 삭제
                 if (updatedActiveParticipants.length === 0) {
@@ -592,11 +592,24 @@ export default function ChatScreen() {
                   const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
                   await Promise.all(deletePromises);
 
-                  // 세션 및 양쪽 참조 삭제
+                  // 세션 문서 삭제
                   await deleteDoc(sessionDocRef);
-                  await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
-                  await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
-                } else {
+
+                  // 양쪽 사용자의 chatSessions 참조 삭제
+                  try {
+                    await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
+                  } catch (e) {
+                    // 이미 삭제된 경우 무시
+                  }
+
+                  if (otherUserId) {
+                    try {
+                      await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
+                    } catch (e) {
+                      // 이미 삭제된 경우 무시
+                    }
+                  }
+                } else if (otherUserId) {
                   // 상대방은 여전히 참여 중 - 자신만 제거 및 사용자 참조만 삭제
                   // 입력 중 상태도 함께 해제
                   await setDoc(sessionDocRef, {
@@ -674,18 +687,16 @@ export default function ChatScreen() {
                     style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={isSelf ? styles.messageTextSelf : styles.messageText}
-                        numberOfLines={0}
-                        allowFontScaling={false}
-                      >
-                        {msg.text}
-                      </Text>
-                      <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
-                        {formatMessageTime(msg.createdAt)}
-                      </Text>
-                    </View>
+                    <Text
+                      style={isSelf ? styles.messageTextSelf : styles.messageText}
+                      numberOfLines={0}
+                      allowFontScaling={false}
+                    >
+                      {msg.text}
+                    </Text>
+                    <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
+                      {formatMessageTime(msg.createdAt)}
+                    </Text>
                   </Pressable>
                 </View>
               );
