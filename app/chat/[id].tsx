@@ -672,20 +672,26 @@ export default function ChatScreen() {
                   // 세션 삭제
                   batch.delete(sessionDocRef);
 
-                  // 자신의 chatSessions 참조 삭제
+                  // 자신의 chatSessions 참조 삭제 (필수 - batch에 포함)
                   batch.delete(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
-
-                  // 상대방의 chatSessions 참조도 삭제 시도 (권한이 없을 수 있음)
-                  const otherUserId = postInfo.userId;
-                  if (otherUserId && otherUserId !== currentUserId) {
-                    batch.delete(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
-                  }
 
                   await batch.commit();
                   console.log('Session and all messages deleted successfully');
+
+                  // 상대방의 chatSessions 참조도 삭제 시도 (별도 처리 - 실패해도 무방)
+                  const otherUserId = postInfo.userId;
+                  if (otherUserId && otherUserId !== currentUserId) {
+                    try {
+                      await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
+                      console.log('Other user session reference deleted');
+                    } catch (refDeleteError: any) {
+                      console.log('Could not delete other user session reference (permission):', refDeleteError.code);
+                      // 무시 - 상대방이 충분히 빨리 들어오지 않으면 상관없음
+                    }
+                  }
                 } catch (deleteError: any) {
                   console.error('Error deleting messages/session:', deleteError);
-                  // 일부만 삭제 실패해도 계속 진행
+                  Alert.alert(i18n.t('common.error'), '채팅 기록 삭제 중에 오류가 발생했습니다.');
                 }
               } else {
                 // 3. 다른 사람이 남아있는 경우: activeParticipants 업데이트만
