@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView, Pressable } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import * as Clipboard from 'expo-clipboard';
@@ -177,6 +177,41 @@ export default function ChatScreen() {
       isMounted = false;
     };
   }, [sessionIdFromParams]);
+
+  // 화면이 포커스될 때마다 세션 존재 여부 재확인
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🟢 useFocusEffect: Checking session existence');
+      let isMounted = true;
+
+      const checkSession = async () => {
+        if (!sessionIdFromParams || !auth.currentUser || !isMounted) return;
+
+        try {
+          const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+          const sessionDoc = await getDoc(sessionDocRef);
+
+          if (!isMounted) return;
+
+          if (sessionDoc.exists()) {
+            console.log('🟢 Session exists, setting sessionExists=true');
+            setSessionExists(true);
+          } else {
+            console.log('🟢 Session does not exist, setting sessionExists=false');
+            setSessionExists(false);
+          }
+        } catch (error) {
+          console.log('🟢 Error checking session:', error);
+        }
+      };
+
+      checkSession();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [sessionIdFromParams])
+  );
 
   // 상대방이 나간 것을 감지하고 입력 중 상태를 감시하는 useEffect
   useEffect(() => {
