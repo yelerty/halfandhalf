@@ -717,6 +717,16 @@ export default function ChatScreen() {
               }
 
               Alert.alert(i18n.t('common.success'), '채팅방을 나갔습니다.');
+
+              // 로컬 상태 정리
+              setMessages([]);
+              setPostInfo(null);
+              setSessionExists(false);
+              setPartnerLeft(false);
+              setPartnerTyping(false);
+              setMessage('');
+              hasMarkedAsReadRef.current = false;
+
               router.back();
             } catch (error: any) {
               console.error('Error leaving chat:', error);
