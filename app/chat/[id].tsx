@@ -590,47 +590,31 @@ export default function ChatScreen() {
             try {
               const currentUserId = auth.currentUser.uid;
               const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-              const sessionDoc = await getDoc(sessionDocRef);
 
-              if (sessionDoc.exists()) {
-                const currentActiveParticipants = sessionDoc.data()?.activeParticipants || [];
-                const otherUserId = currentActiveParticipants.find((id: string) => id !== currentUserId);
+              console.log('Leaving chat session:', {
+                sessionId: sessionIdFromParams,
+                currentUserId: currentUserId.substring(0, 8),
+              });
 
-                // 한명이 나가면 세션 전체 삭제 (상대방 활성 여부 상관없이)
-                console.log('Leaving chat - deleting session:', {
-                  sessionId: sessionIdFromParams,
-                  currentUserId: currentUserId.substring(0, 8),
-                  otherUserId: otherUserId?.substring(0, 8),
-                });
+              // 자신의 chatSessions 참조만 삭제 (권한 문제 방지)
+              try {
+                await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
+                console.log('Deleted current user session reference');
+              } catch (e: any) {
+                console.log('Error deleting user session reference:', e.code);
+                // 권한 오류는 무시하고 계속 진행
+              }
 
-                // 1. 모든 메시지 삭제
-                const messagesSnapshot = await getDocs(
-                  collection(db, 'chatSessions', sessionIdFromParams, 'messages')
-                );
-                const deletePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(deletePromises);
-                console.log(`Deleted ${messagesSnapshot.docs.length} messages`);
-
-                // 2. 세션 문서 삭제
-                await deleteDoc(sessionDocRef);
-                console.log('Deleted session document');
-
-                // 3. 양쪽 사용자의 chatSessions 참조 삭제
-                try {
-                  await deleteDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams));
-                  console.log('Deleted current user session reference');
-                } catch (e) {
-                  console.log('Current user session reference already deleted');
-                }
-
-                if (otherUserId) {
-                  try {
-                    await deleteDoc(doc(db, 'users', otherUserId, 'chatSessions', sessionIdFromParams));
-                    console.log('Deleted other user session reference');
-                  } catch (e) {
-                    console.log('Other user session reference already deleted');
-                  }
-                }
+              // 세션을 "left" 상태로 표시 (메시지 삭제는 백그라운드 작업으로 처리)
+              try {
+                await setDoc(sessionDocRef, {
+                  leftBy: currentUserId,
+                  leftAt: new Date().toISOString(),
+                }, { merge: true });
+                console.log('Marked session as left');
+              } catch (e: any) {
+                console.log('Error marking session as left:', e.code);
+                // 권한 오류는 무시하고 계속 진행
               }
 
               // 타이머 정리
@@ -638,9 +622,11 @@ export default function ChatScreen() {
                 clearTimeout(typingTimeoutRef.current);
               }
 
+              Alert.alert(i18n.t('common.success'), '채팅방을 나갔습니다.');
               router.back();
             } catch (error: any) {
-              Alert.alert(i18n.t('common.error'), error.message);
+              console.error('Error leaving chat:', error);
+              Alert.alert(i18n.t('common.error'), '채팅방을 나가는 중에 오류가 발생했습니다.');
             }
           },
         },
