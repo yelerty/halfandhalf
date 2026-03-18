@@ -42,6 +42,7 @@ export default function ChatScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const hasMarkedAsReadRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const messageUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // 채팅 세션 정보 가져오기 또는 params에서 설정
   useEffect(() => {
@@ -268,10 +269,17 @@ export default function ChatScreen() {
 
     console.log('Partner left detected - cleaning up session');
 
-    // 1. 최우선: sessionExists false로 설정해서 메시지 구독 중단
+    // 1. 즉시: 메시지 구독 직접 cleanup (ref에서 호출)
+    if (messageUnsubscribeRef.current) {
+      console.log('Unsubscribing from messages immediately');
+      messageUnsubscribeRef.current();
+      messageUnsubscribeRef.current = null;
+    }
+
+    // 2. sessionExists false로 설정
     setSessionExists(false);
 
-    // 2. 로컬 상태 정리
+    // 3. 로컬 상태 정리
     setMessages([]);
     setPostInfo(null);
     setPartnerTyping(false);
@@ -317,12 +325,21 @@ export default function ChatScreen() {
       hasUser: !!auth.currentUser,
       sessionExists,
     });
+
+    // 기존 구독 정리
+    if (messageUnsubscribeRef.current) {
+      console.log('Cleaning up previous message subscription');
+      messageUnsubscribeRef.current();
+      messageUnsubscribeRef.current = null;
+    }
+
     if (!sessionIdFromParams || !auth.currentUser || !sessionExists) {
       console.log('Message subscription skipped:', {
         sessionIdFromParams,
         hasUser: !!auth.currentUser,
         sessionExists,
       });
+      setMessages([]);
       return;
     }
 
@@ -394,7 +411,13 @@ export default function ChatScreen() {
       }
     );
 
-    return () => unsubscribe();
+    // unsubscribe를 ref에 저장 (partnerLeft에서 직접 호출 가능하게)
+    messageUnsubscribeRef.current = unsubscribe;
+
+    return () => {
+      unsubscribe();
+      messageUnsubscribeRef.current = null;
+    };
   }, [sessionIdFromParams, sessionExists]);
 
   const handleSend = async () => {
