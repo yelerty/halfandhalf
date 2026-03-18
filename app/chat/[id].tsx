@@ -470,6 +470,26 @@ export default function ChatScreen() {
           currentUserId: currentUserId.substring(0, 8),
           postOwnerId: postInfo.userId.substring(0, 8),
         });
+
+        // 0. 먼저 이전 메시지 정리 (같은 sessionId라도 있을 수 있음)
+        try {
+          const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
+          const oldMessagesSnapshot = await getDocs(messagesCollectionRef);
+
+          if (oldMessagesSnapshot.docs.length > 0) {
+            console.log('Found', oldMessagesSnapshot.docs.length, 'old messages - deleting');
+            const batch = writeBatch(db);
+            oldMessagesSnapshot.docs.forEach((doc) => {
+              batch.delete(doc.ref);
+            });
+            await batch.commit();
+            console.log('Old messages deleted successfully');
+          }
+        } catch (error: any) {
+          console.log('Could not clean old messages:', error.code);
+          // 계속 진행
+        }
+
         // 1. 채팅 세션 생성
         await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
