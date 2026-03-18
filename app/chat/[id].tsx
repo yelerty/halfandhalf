@@ -266,18 +266,44 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!partnerLeft) return;
 
-    // "상대방이 채팅방을 나갔습니다" 표시
-    Alert.alert(
-      i18n.t('common.confirm'),
-      i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.'
-    );
+    const handlePartnerLeft = async () => {
+      // 자신의 세션도 정리
+      if (auth.currentUser && sessionIdFromParams) {
+        try {
+          const batch = writeBatch(db);
 
-    // 2초 후 자동으로 화면 나가기
-    const timer = setTimeout(() => {
+          // 자신의 chatSessions 참조 삭제
+          batch.delete(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
+
+          // 세션 문서도 삭제
+          batch.delete(doc(db, 'chatSessions', sessionIdFromParams));
+
+          await batch.commit();
+          console.log('Session cleaned up after partner left');
+        } catch (error: any) {
+          console.error('Error cleaning up session:', error);
+        }
+      }
+
+      // 로컬 상태 정리
+      setMessages([]);
+      setPostInfo(null);
+      setSessionExists(false);
+      setPartnerTyping(false);
+      setMessage('');
+      hasMarkedAsReadRef.current = false;
+
+      // "상대방이 채팅방을 나갔습니다" 표시
+      Alert.alert(
+        i18n.t('common.confirm'),
+        i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.'
+      );
+
+      // 자동으로 화면 나가기
       router.back();
-    }, 2000);
+    };
 
-    return () => clearTimeout(timer);
+    handlePartnerLeft();
   }, [partnerLeft]);
 
   // 메시지 실시간 구독 (세션이 존재할 때만)
