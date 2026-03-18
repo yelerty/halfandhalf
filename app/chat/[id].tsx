@@ -267,42 +267,16 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!partnerLeft) return;
 
-    console.log('Partner left detected - cleaning up session');
+    console.log('Partner left detected - immediate back');
 
-    // 1. 즉시: 메시지 구독 직접 cleanup (ref에서 호출)
+    // 메시지 구독 즉시 정리
     if (messageUnsubscribeRef.current) {
-      console.log('Unsubscribing from messages immediately');
+      console.log('Unsubscribing from messages');
       messageUnsubscribeRef.current();
       messageUnsubscribeRef.current = null;
     }
 
-    // 2. sessionExists false로 설정
-    setSessionExists(false);
-
-    // 3. 로컬 상태 정리
-    setMessages([]);
-    setPostInfo(null);
-    setPartnerTyping(false);
-    setMessage('');
-    hasMarkedAsReadRef.current = false;
-
-    // 3. 서버에서 세션 정리 (비동기)
-    if (auth.currentUser && sessionIdFromParams) {
-      (async () => {
-        try {
-          // 자신의 chatSessions 참조와 세션 문서 동시 삭제
-          const batch = writeBatch(db);
-          batch.delete(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
-          batch.delete(doc(db, 'chatSessions', sessionIdFromParams));
-          await batch.commit();
-          console.log('Session cleaned up after partner left');
-        } catch (error: any) {
-          console.error('Error cleaning up session:', error.code, error.message);
-        }
-      })();
-    }
-
-    // 4. 팝업 표시
+    // 화면 즉시 나가기 (다른 모든 것을 건너뜀)
     Alert.alert(
       i18n.t('common.confirm'),
       i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.',
@@ -310,11 +284,27 @@ export default function ChatScreen() {
         {
           text: i18n.t('common.confirm'),
           onPress: () => {
+            // 알림 후 즉시 나가기
             router.back();
           },
         },
       ]
     );
+
+    // 백그라운드에서 세션 정리 (화면 떠난 후)
+    if (auth.currentUser && sessionIdFromParams) {
+      setTimeout(async () => {
+        try {
+          const batch = writeBatch(db);
+          batch.delete(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams));
+          batch.delete(doc(db, 'chatSessions', sessionIdFromParams));
+          await batch.commit();
+          console.log('Session cleaned up in background');
+        } catch (error: any) {
+          console.error('Error cleaning up session:', error.code);
+        }
+      }, 500);
+    }
   }, [partnerLeft]);
 
   // 메시지 실시간 구독 (세션이 존재할 때만)
