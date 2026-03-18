@@ -266,44 +266,47 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!partnerLeft) return;
 
-    const handlePartnerLeft = async () => {
-      // 자신의 세션도 정리
-      if (auth.currentUser && sessionIdFromParams) {
+    console.log('Partner left detected - cleaning up session');
+
+    // 1. 최우선: sessionExists false로 설정해서 메시지 구독 중단
+    setSessionExists(false);
+
+    // 2. 로컬 상태 정리
+    setMessages([]);
+    setPostInfo(null);
+    setPartnerTyping(false);
+    setMessage('');
+    hasMarkedAsReadRef.current = false;
+
+    // 3. 서버에서 세션 정리 (비동기)
+    if (auth.currentUser && sessionIdFromParams) {
+      (async () => {
         try {
+          // 자신의 chatSessions 참조와 세션 문서 동시 삭제
           const batch = writeBatch(db);
-
-          // 자신의 chatSessions 참조 삭제
           batch.delete(doc(db, 'users', auth.currentUser.uid, 'chatSessions', sessionIdFromParams));
-
-          // 세션 문서도 삭제
           batch.delete(doc(db, 'chatSessions', sessionIdFromParams));
-
           await batch.commit();
           console.log('Session cleaned up after partner left');
         } catch (error: any) {
-          console.error('Error cleaning up session:', error);
+          console.error('Error cleaning up session:', error.code, error.message);
         }
-      }
+      })();
+    }
 
-      // 로컬 상태 정리
-      setMessages([]);
-      setPostInfo(null);
-      setSessionExists(false);
-      setPartnerTyping(false);
-      setMessage('');
-      hasMarkedAsReadRef.current = false;
-
-      // "상대방이 채팅방을 나갔습니다" 표시
-      Alert.alert(
-        i18n.t('common.confirm'),
-        i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.'
-      );
-
-      // 자동으로 화면 나가기
-      router.back();
-    };
-
-    handlePartnerLeft();
+    // 4. 팝업 표시
+    Alert.alert(
+      i18n.t('common.confirm'),
+      i18n.t('chat.partnerLeft') || '상대방이 채팅방을 나갔습니다.',
+      [
+        {
+          text: i18n.t('common.confirm'),
+          onPress: () => {
+            router.back();
+          },
+        },
+      ]
+    );
   }, [partnerLeft]);
 
   // 메시지 실시간 구독 (세션이 존재할 때만)
