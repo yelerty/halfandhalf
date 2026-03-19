@@ -291,17 +291,14 @@ export default function ChatScreen() {
       ]
     );
 
-    // 백그라운드에서 세션 정리 (화면 떠난 후)
+    // 백그라운드에서 자신의 세션 참조만 삭제 (권한 에러 방지)
     if (auth.currentUser && sessionIdFromParams) {
       setTimeout(async () => {
         try {
-          const batch = writeBatch(db);
-          batch.delete(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams));
-          batch.delete(doc(db, 'chatSessions', sessionIdFromParams));
-          await batch.commit();
-          console.log('Session cleaned up in background');
+          await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams));
+          console.log('User session reference cleaned up');
         } catch (error: any) {
-          console.error('Error cleaning up session:', error.code);
+          console.error('Error cleaning up user session reference:', error.code);
         }
       }, 500);
     }
@@ -338,6 +335,23 @@ export default function ChatScreen() {
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
 
+    // 세션 정보 가져오기 (sessionVersion 확인용)
+    const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+    let sessionVersion = 0;
+
+    const sessionUnsubscribe = onSnapshot(
+      sessionDocRef,
+      (sessionSnapshot) => {
+        if (sessionSnapshot.exists()) {
+          sessionVersion = sessionSnapshot.data()?.sessionVersion || 0;
+          console.log('Session version:', sessionVersion);
+        }
+      },
+      (error) => {
+        console.log('Error listening to session version:', error.code);
+      }
+    );
+
     const unsubscribe = onSnapshot(
       q,
       async (snapshot) => {
@@ -347,14 +361,20 @@ export default function ChatScreen() {
           ...doc.data()
         })) as Message[];
 
-        console.log('Setting messages. Count:', messagesData.length);
-        if (messagesData.length > 0) {
-          console.log('All messages:');
-          messagesData.forEach((msg, idx) => {
+        // sessionVersion 이후에만 메시지 표시 (이전 메시지 필터)
+        const filteredMessages = messagesData.filter((msg) => {
+          const msgTime = msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0;
+          return msgTime >= sessionVersion;
+        });
+
+        console.log(`Filtered messages: ${filteredMessages.length}/${messagesData.length} (version cutoff: ${sessionVersion})`);
+        if (filteredMessages.length > 0) {
+          console.log('Visible messages:');
+          filteredMessages.forEach((msg, idx) => {
             console.log(`  [${idx}] id=${msg.id?.substring(0, 8)}, sender=${msg.senderId?.substring(0, 8)}, text=${msg.text?.substring(0, 20)}`);
           });
         }
-        setMessages(messagesData);
+        setMessages(filteredMessages);
 
         // 첫 구독 시에만 읽음 처리 (중복 방지)
         if (!hasMarkedAsReadRef.current) {
@@ -406,6 +426,7 @@ export default function ChatScreen() {
 
     return () => {
       unsubscribe();
+      sessionUnsubscribe();
       messageUnsubscribeRef.current = null;
     };
   }, [sessionIdFromParams, sessionExists]);
@@ -471,34 +492,7 @@ export default function ChatScreen() {
           postOwnerId: postInfo.userId.substring(0, 8),
         });
 
-        // 0. 먼저 이전 메시지 모두 hard delete (강제)
-        try {
-          const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
-          const oldMessagesSnapshot = await getDocs(messagesCollectionRef);
-
-          if (oldMessagesSnapshot.docs.length > 0) {
-            console.log('Force deleting old messages:', oldMessagesSnapshot.docs.length, 'total');
-            let deletedCount = 0;
-
-            // 모든 메시지 hard delete 시도 (권한 에러 무시)
-            for (const messageDoc of oldMessagesSnapshot.docs) {
-              try {
-                await deleteDoc(messageDoc.ref);
-                deletedCount++;
-              } catch (error: any) {
-                // 권한 에러는 무시하고 계속 진행
-                console.log('Could not delete message:', error.code);
-              }
-            }
-
-            console.log('Force deleted', deletedCount, 'messages');
-          }
-        } catch (error: any) {
-          console.log('Error during message cleanup:', error.code);
-          // 계속 진행 - 메시지 삭제 실패해도 새 세션은 생성
-        }
-
-        // 1. 채팅 세션 생성
+        // 1. 채팅 세션 생성 (이전 메시지는 자동으로 숨겨짐)
         await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
           postStore: postInfo.store,
@@ -506,6 +500,7 @@ export default function ChatScreen() {
           participants,
           activeParticipants: participants, // 양쪽 모두 활성 상태로 시작
           createdAt: serverTimestamp(),
+          sessionVersion: Date.now(), // 세션 버전 추가 - 새 메시지는 이 버전 이후에만 표시
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
         });
@@ -545,10 +540,22 @@ export default function ChatScreen() {
 
         setSessionExists(true);
       } else {
-        // 세션이 있으면 lastMessage 업데이트
-        await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
+        // 세션이 있으면 - 재참여시 sessionVersion 업데이트 (이전 메시지 숨기기)
+        const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+        const currentSessionDoc = await getDoc(sessionDocRef);
+        let newSessionVersion = Date.now();
+
+        if (currentSessionDoc.exists()) {
+          const existingVersion = currentSessionDoc.data()?.sessionVersion || 0;
+          // 재참여인 경우 새로운 sessionVersion으로 이전 메시지 숨기기
+          console.log('Rejoining chat - updating sessionVersion from', existingVersion, 'to', newSessionVersion);
+        }
+
+        await setDoc(sessionDocRef, {
+          sessionVersion: newSessionVersion,
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
+          activeParticipants: participants, // 재참여 시 다시 활성 상태로 변경
         }, { merge: true });
 
         // 상대방 세션 참조도 업데이트
