@@ -70,8 +70,23 @@ export default function ChatScreen() {
         if (sessionDoc.exists()) {
           console.log('Chat session exists, setting sessionExists=true');
           // 기존 세션이 있으면 사용
-          setSessionExists(true);
           const sessionData = sessionDoc.data();
+
+          // 기존 세션이 sessionVersion이 없으면 현재 시간으로 초기화
+          // (이전 메시지들을 숨기기 위해)
+          if (!sessionData.sessionVersion) {
+            console.log('Initializing sessionVersion for old session');
+            try {
+              const initVersion = Date.now();
+              await setDoc(sessionDocRef, {
+                sessionVersion: initVersion,
+              }, { merge: true });
+            } catch (error) {
+              console.log('Could not initialize sessionVersion:', error);
+            }
+          }
+
+          setSessionExists(true);
           const postId = sessionData.postId;
 
           // 게시글 정보 가져오기
@@ -335,16 +350,28 @@ export default function ChatScreen() {
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
 
-    // 세션 정보 가져오기 (sessionVersion 확인용)
+    // sessionVersion를 ref로 관리 (구독 콜백에서 최신 값 사용)
+    const sessionVersionRef = { current: 0 };
     const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-    let sessionVersion = 0;
+
+    // 먼저 현재 sessionVersion을 한 번 읽기 (초기값 설정)
+    getDoc(sessionDocRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const version = snapshot.data()?.sessionVersion || 0;
+        sessionVersionRef.current = version;
+        console.log('Session version loaded:', version);
+      }
+    }).catch((error) => {
+      console.log('Error loading session version:', error.code);
+    });
 
     const sessionUnsubscribe = onSnapshot(
       sessionDocRef,
       (sessionSnapshot) => {
         if (sessionSnapshot.exists()) {
-          sessionVersion = sessionSnapshot.data()?.sessionVersion || 0;
-          console.log('Session version:', sessionVersion);
+          const newVersion = sessionSnapshot.data()?.sessionVersion || 0;
+          sessionVersionRef.current = newVersion;
+          console.log('Session version updated:', newVersion);
         }
       },
       (error) => {
@@ -364,10 +391,10 @@ export default function ChatScreen() {
         // sessionVersion 이후에만 메시지 표시 (이전 메시지 필터)
         const filteredMessages = messagesData.filter((msg) => {
           const msgTime = msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0;
-          return msgTime >= sessionVersion;
+          return msgTime >= sessionVersionRef.current;
         });
 
-        console.log(`Filtered messages: ${filteredMessages.length}/${messagesData.length} (version cutoff: ${sessionVersion})`);
+        console.log(`Filtered messages: ${filteredMessages.length}/${messagesData.length} (version cutoff: ${sessionVersionRef.current})`);
         if (filteredMessages.length > 0) {
           console.log('Visible messages:');
           filteredMessages.forEach((msg, idx) => {
