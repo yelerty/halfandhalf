@@ -477,13 +477,22 @@ export default function ChatScreen() {
           const oldMessagesSnapshot = await getDocs(messagesCollectionRef);
 
           if (oldMessagesSnapshot.docs.length > 0) {
-            console.log('Found', oldMessagesSnapshot.docs.length, 'old messages - deleting');
-            const batch = writeBatch(db);
-            oldMessagesSnapshot.docs.forEach((doc) => {
-              batch.delete(doc.ref);
-            });
-            await batch.commit();
-            console.log('Old messages deleted successfully');
+            console.log('Found', oldMessagesSnapshot.docs.length, 'old messages');
+
+            // 자신이 보낸 메시지만 삭제 (다른 사람의 메시지는 권한 없음)
+            for (const messageDoc of oldMessagesSnapshot.docs) {
+              const msgData = messageDoc.data();
+              if (msgData.senderId === currentUserId) {
+                try {
+                  await deleteDoc(messageDoc.ref);
+                  console.log('Deleted own message');
+                } catch (deleteError: any) {
+                  console.log('Error deleting own message:', deleteError.code);
+                }
+              }
+            }
+
+            console.log('Old messages cleanup completed');
           }
         } catch (error: any) {
           console.log('Could not clean old messages:', error.code);
@@ -727,23 +736,24 @@ export default function ChatScreen() {
                 const messagesSnapshot = await getDocs(messagesCollectionRef);
 
                 if (messagesSnapshot.docs.length > 0) {
-                  console.log('Deleting', messagesSnapshot.docs.length, 'messages');
-                  const messageBatch = writeBatch(db);
+                  console.log('Deleting own messages only:', messagesSnapshot.docs.length, 'total');
                   let deleteCount = 0;
 
+                  // 자신이 보낸 메시지만 개별 삭제 (권한 에러 피하기)
                   for (const messageDoc of messagesSnapshot.docs) {
                     const msgData = messageDoc.data();
                     // 자신이 보낸 메시지만 삭제 가능
                     if (msgData.senderId === currentUserId) {
-                      messageBatch.delete(messageDoc.ref);
-                      deleteCount++;
+                      try {
+                        await deleteDoc(messageDoc.ref);
+                        deleteCount++;
+                      } catch (error: any) {
+                        console.log('Could not delete own message:', error.code);
+                      }
                     }
                   }
 
-                  if (deleteCount > 0) {
-                    await messageBatch.commit();
-                    console.log('Deleted', deleteCount, 'messages authored by current user');
-                  }
+                  console.log('Deleted', deleteCount, 'messages authored by current user');
                 }
               } catch (deleteError: any) {
                 console.error('Error in cleanup process:', deleteError.code, deleteError.message);
