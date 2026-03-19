@@ -590,14 +590,12 @@ export default function ChatScreen() {
 
         setSessionExists(true);
       } else {
-        // 세션이 있으면 - 재참여시 sessionVersion 업데이트 (이전 메시지 숨기기)
+        // 세션이 있으면 - lastMessage만 업데이트 (sessionVersion은 유지)
         const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
 
         await setDoc(sessionDocRef, {
-          sessionVersion: serverTimestamp(), // 서버 시간으로 이전 메시지 숨기기
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
-          activeParticipants: participants, // 재참여 시 다시 활성 상태로 변경
         }, { merge: true });
 
         // 상대방 세션 참조도 업데이트
