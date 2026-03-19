@@ -73,16 +73,28 @@ export default function ChatScreen() {
           // 기존 세션이 있으면 사용
           const sessionData = sessionDoc.data();
 
-          // 기존 세션이 sessionVersion이 없으면 현재 시간으로 초기화
-          // (이전 메시지들을 숨기기 위해)
+          // 기존 세션이 sessionVersion이 없으면 모든 이전 메시지 삭제
           if (!sessionData.sessionVersion) {
-            console.log('Initializing sessionVersion for old session');
+            console.log('Clearing old messages from session');
             try {
+              // 이전 메시지 모두 삭제
+              const messagesRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
+              const messagesSnap = await getDocs(messagesRef);
+              for (const msgDoc of messagesSnap.docs) {
+                try {
+                  await deleteDoc(msgDoc.ref);
+                } catch (e) {
+                  // 삭제 실패는 무시
+                }
+              }
+
+              // 새로운 sessionVersion 설정
               await setDoc(sessionDocRef, {
                 sessionVersion: serverTimestamp(),
               }, { merge: true });
+              console.log('Old messages cleared and sessionVersion set');
             } catch (error) {
-              console.log('Could not initialize sessionVersion:', error);
+              console.log('Could not clear old messages:', error);
             }
           }
 
@@ -366,15 +378,13 @@ export default function ChatScreen() {
       return 0;
     };
 
-    let versionLoaded = false;
-
     // 먼저 현재 sessionVersion을 한 번 읽기 (초기값 설정)
+    // 단, version > 0인 경우만 ready로 표시
     getDoc(sessionDocRef).then((snapshot) => {
       if (snapshot.exists()) {
         const version = getVersionTimestamp(snapshot.data()?.sessionVersion);
         sessionVersionRef.current = version;
-        versionLoaded = true;
-        // sessionVersion이 로드되었으므로 메시지 필터링 시작 가능
+        // sessionVersion이 실제 값(> 0)으로 로드되었을 때만 ready
         if (version > 0) {
           setSessionVersionReady(true);
         }
