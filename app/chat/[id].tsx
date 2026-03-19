@@ -569,6 +569,7 @@ export default function ChatScreen() {
         text: messageText,
         senderId: currentUserId,
         createdAt: serverTimestamp(),
+        participants, // 세션의 모든 참여자가 메시지 삭제 가능하도록
       });
       console.log('Message saved successfully:', docRef.id);
 

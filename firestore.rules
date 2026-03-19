@@ -57,10 +57,13 @@ service cloud.firestore {
         allow create: if isAuthenticated()
           && request.resource.data.senderId == request.auth.uid;
 
-        // 메시지 수정 금지, 삭제는 작성자만 가능
+        // 메시지 수정 금지
         allow update: if false;
+
+        // 메시지 삭제: 작성자 또는 세션 참여자만 가능
         allow delete: if isAuthenticated()
-          && request.resource.data.senderId == request.auth.uid;
+          && (request.resource.data.senderId == request.auth.uid
+              || request.auth.uid in request.resource.data.get('participants', []));
       }
     }
 
