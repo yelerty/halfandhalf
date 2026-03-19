@@ -74,7 +74,9 @@ export default function PostDetailScreen() {
 
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, post.userId].sort();
-    const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
+    // timestamp 추가: 매번 새로운 sessionId 생성 (이전 메시지 안 보임)
+    const timestamp = Date.now();
+    const sessionId = `${post.id}_${participants[0]}_${participants[1]}_${timestamp}`;
 
     router.push({
       pathname: `/chat/${sessionId}`,
