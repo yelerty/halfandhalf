@@ -342,10 +342,16 @@ export default function ChatScreen() {
       q,
       async (snapshot) => {
         console.log('Message subscription fired, got', snapshot.docs.length, 'messages');
-        const messagesData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Message[];
+        const messagesData = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          .filter((msg: any) => {
+            // 현재 사용자가 삭제하지 않은 메시지만 표시
+            const deletedBy = msg.deletedBy || [];
+            return !deletedBy.includes(currentUserId);
+          }) as Message[];
 
         console.log('Setting messages. Count:', messagesData.length);
         if (messagesData.length > 0) {
@@ -472,22 +478,27 @@ export default function ChatScreen() {
         });
 
         // 0. 먼저 이전 메시지 정리 (같은 sessionId라도 있을 수 있음)
+        // 모든 메시지에 자신을 deletedBy에 추가해서 soft delete
         try {
           const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
           const oldMessagesSnapshot = await getDocs(messagesCollectionRef);
 
           if (oldMessagesSnapshot.docs.length > 0) {
-            console.log('Found', oldMessagesSnapshot.docs.length, 'old messages');
+            console.log('Clearing old messages:', oldMessagesSnapshot.docs.length, 'total');
 
-            // 자신이 보낸 메시지만 삭제 (다른 사람의 메시지는 권한 없음)
+            // 모든 메시지에 현재 사용자를 deletedBy에 추가 (soft delete)
             for (const messageDoc of oldMessagesSnapshot.docs) {
               const msgData = messageDoc.data();
-              if (msgData.senderId === currentUserId) {
+              const deletedBy = msgData.deletedBy || [];
+
+              if (!deletedBy.includes(currentUserId)) {
                 try {
-                  await deleteDoc(messageDoc.ref);
-                  console.log('Deleted own message');
-                } catch (deleteError: any) {
-                  console.log('Error deleting own message:', deleteError.code);
+                  await setDoc(messageDoc.ref, {
+                    deletedBy: [...deletedBy, currentUserId],
+                  }, { merge: true });
+                  console.log('Marked old message as deleted');
+                } catch (error: any) {
+                  console.log('Could not mark message:', error.code);
                 }
               }
             }
@@ -578,7 +589,8 @@ export default function ChatScreen() {
         text: messageText,
         senderId: currentUserId,
         createdAt: serverTimestamp(),
-        participants, // 세션의 모든 참여자가 메시지 삭제 가능하도록
+        participants,
+        deletedBy: [], // soft delete 추적용 (실제 삭제 아님)
       });
       console.log('Message saved successfully:', docRef.id);
 
@@ -736,24 +748,29 @@ export default function ChatScreen() {
                 const messagesSnapshot = await getDocs(messagesCollectionRef);
 
                 if (messagesSnapshot.docs.length > 0) {
-                  console.log('Deleting own messages only:', messagesSnapshot.docs.length, 'total');
-                  let deleteCount = 0;
+                  console.log('Marking messages as deleted for:', messagesSnapshot.docs.length, 'total');
+                  let markCount = 0;
 
-                  // 자신이 보낸 메시지만 개별 삭제 (권한 에러 피하기)
+                  // 모든 메시지에 자신을 deletedBy에 추가 (soft delete)
                   for (const messageDoc of messagesSnapshot.docs) {
                     const msgData = messageDoc.data();
-                    // 자신이 보낸 메시지만 삭제 가능
-                    if (msgData.senderId === currentUserId) {
+                    const deletedBy = msgData.deletedBy || [];
+
+                    // 이미 자신이 삭제했으면 skip
+                    if (!deletedBy.includes(currentUserId)) {
                       try {
-                        await deleteDoc(messageDoc.ref);
-                        deleteCount++;
+                        // 메시지 실제 삭제 아님, deletedBy 배열만 업데이트
+                        await setDoc(messageDoc.ref, {
+                          deletedBy: [...deletedBy, currentUserId],
+                        }, { merge: true });
+                        markCount++;
                       } catch (error: any) {
-                        console.log('Could not delete own message:', error.code);
+                        console.log('Could not mark message as deleted:', error.code);
                       }
                     }
                   }
 
-                  console.log('Deleted', deleteCount, 'messages authored by current user');
+                  console.log('Marked', markCount, 'messages as deleted for current user');
                 }
               } catch (deleteError: any) {
                 console.error('Error in cleanup process:', deleteError.code, deleteError.message);
