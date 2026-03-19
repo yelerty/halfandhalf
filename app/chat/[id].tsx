@@ -73,28 +73,17 @@ export default function ChatScreen() {
           // 기존 세션이 있으면 사용
           const sessionData = sessionDoc.data();
 
-          // 기존 세션이 sessionVersion이 없으면 모든 이전 메시지 삭제
+          // 기존 세션이 sessionVersion이 없으면 새로운 sessionVersion 설정만 함
+          // (이전 메시지는 필터링으로 숨김)
           if (!sessionData.sessionVersion) {
-            console.log('Clearing old messages from session');
+            console.log('Setting sessionVersion for old session');
             try {
-              // 이전 메시지 모두 삭제
-              const messagesRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
-              const messagesSnap = await getDocs(messagesRef);
-              for (const msgDoc of messagesSnap.docs) {
-                try {
-                  await deleteDoc(msgDoc.ref);
-                } catch (e) {
-                  // 삭제 실패는 무시
-                }
-              }
-
-              // 새로운 sessionVersion 설정
               await setDoc(sessionDocRef, {
                 sessionVersion: serverTimestamp(),
               }, { merge: true });
-              console.log('Old messages cleared and sessionVersion set');
+              console.log('sessionVersion set');
             } catch (error) {
-              console.log('Could not clear old messages:', error);
+              console.log('Could not set sessionVersion:', error);
             }
           }
 
@@ -422,10 +411,13 @@ export default function ChatScreen() {
         })) as Message[];
 
         // sessionVersion 이후에만 메시지 표시 (이전 메시지 필터)
-        const filteredMessages = messagesData.filter((msg) => {
-          const msgTime = msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0;
-          return msgTime >= sessionVersionRef.current;
-        });
+        // sessionVersionRef.current가 0이면 아직 로드 안 됨 - 모두 필터
+        const filteredMessages = sessionVersionRef.current === 0
+          ? []
+          : messagesData.filter((msg) => {
+              const msgTime = msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0;
+              return msgTime >= sessionVersionRef.current;
+            });
 
         console.log(`Filtered messages: ${filteredMessages.length}/${messagesData.length} (version cutoff: ${sessionVersionRef.current})`);
         if (filteredMessages.length > 0) {
