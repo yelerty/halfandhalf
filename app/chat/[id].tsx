@@ -39,7 +39,6 @@ export default function ChatScreen() {
   const [sessionExists, setSessionExists] = useState(false);
   const [partnerLeft, setPartnerLeft] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
-  const [sessionVersionReady, setSessionVersionReady] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasMarkedAsReadRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -73,23 +72,7 @@ export default function ChatScreen() {
           // 기존 세션이 있으면 사용
           const sessionData = sessionDoc.data();
 
-          // 기존 세션이 sessionVersion이 없으면 새로운 sessionVersion 설정만 함
-          // (이전 메시지는 필터링으로 숨김)
-          if (!sessionData.sessionVersion) {
-            console.log('Setting sessionVersion for old session');
-            try {
-              await setDoc(sessionDocRef, {
-                sessionVersion: serverTimestamp(),
-              }, { merge: true });
-              console.log('sessionVersion set');
-            } catch (error) {
-              console.log('Could not set sessionVersion:', error);
-            }
-          }
-
           setSessionExists(true);
-          // sessionVersion이 설정되었으므로 메시지 로드 가능
-          setSessionVersionReady(true);
           const postId = sessionData.postId;
 
           // 게시글 정보 가져오기
@@ -339,12 +322,11 @@ export default function ChatScreen() {
       messageUnsubscribeRef.current = null;
     }
 
-    if (!sessionIdFromParams || !auth.currentUser || !sessionExists || !sessionVersionReady) {
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) {
       console.log('Message subscription skipped:', {
         sessionIdFromParams,
         hasUser: !!auth.currentUser,
         sessionExists,
-        sessionVersionReady,
       });
       setMessages([]);
       return;
@@ -355,51 +337,6 @@ export default function ChatScreen() {
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
 
-    // sessionVersion를 ref로 관리 (구독 콜백에서 최신 값 사용)
-    const sessionVersionRef = { current: 0 };
-    const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-
-    // sessionVersion을 타임스탬프(밀리초)로 변환하는 헬퍼 함수
-    const getVersionTimestamp = (version: any): number => {
-      if (!version) return 0;
-      if (version.seconds) return version.seconds * 1000; // Firestore Timestamp
-      if (typeof version === 'number') return version; // 숫자
-      return 0;
-    };
-
-    // 먼저 현재 sessionVersion을 한 번 읽기 (초기값 설정)
-    // 단, version > 0인 경우만 ready로 표시
-    getDoc(sessionDocRef).then((snapshot) => {
-      if (snapshot.exists()) {
-        const version = getVersionTimestamp(snapshot.data()?.sessionVersion);
-        sessionVersionRef.current = version;
-        // sessionVersion이 실제 값(> 0)으로 로드되었을 때만 ready
-        if (version > 0) {
-          setSessionVersionReady(true);
-        }
-        console.log('Session version loaded:', version);
-      }
-    }).catch((error) => {
-      console.log('Error loading session version:', error.code);
-    });
-
-    const sessionUnsubscribe = onSnapshot(
-      sessionDocRef,
-      (sessionSnapshot) => {
-        if (sessionSnapshot.exists()) {
-          const newVersion = getVersionTimestamp(sessionSnapshot.data()?.sessionVersion);
-          sessionVersionRef.current = newVersion;
-          // 처음 정상적인 버전이 로드되었으면 준비 완료
-          if (newVersion > 0) {
-            setSessionVersionReady(true);
-          }
-          console.log('Session version updated:', newVersion);
-        }
-      },
-      (error) => {
-        console.log('Error listening to session version:', error.code);
-      }
-    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -410,23 +347,8 @@ export default function ChatScreen() {
           ...doc.data()
         })) as Message[];
 
-        // sessionVersion 이후에만 메시지 표시 (이전 메시지 필터)
-        // sessionVersionRef.current가 0이면 아직 로드 안 됨 - 모두 필터
-        const filteredMessages = sessionVersionRef.current === 0
-          ? []
-          : messagesData.filter((msg) => {
-              const msgTime = msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0;
-              return msgTime >= sessionVersionRef.current;
-            });
-
-        console.log(`Filtered messages: ${filteredMessages.length}/${messagesData.length} (version cutoff: ${sessionVersionRef.current})`);
-        if (filteredMessages.length > 0) {
-          console.log('Visible messages:');
-          filteredMessages.forEach((msg, idx) => {
-            console.log(`  [${idx}] id=${msg.id?.substring(0, 8)}, sender=${msg.senderId?.substring(0, 8)}, text=${msg.text?.substring(0, 20)}`);
-          });
-        }
-        setMessages(filteredMessages);
+        console.log('Setting messages. Count:', messagesData.length);
+        setMessages(messagesData);
 
         // 첫 구독 시에만 읽음 처리 (중복 방지)
         if (!hasMarkedAsReadRef.current) {
@@ -478,10 +400,9 @@ export default function ChatScreen() {
 
     return () => {
       unsubscribe();
-      sessionUnsubscribe();
       messageUnsubscribeRef.current = null;
     };
-  }, [sessionIdFromParams, sessionExists, sessionVersionReady]);
+  }, [sessionIdFromParams, sessionExists]);
 
   const handleSend = async () => {
     // 메시지 유효성 체크 (공백은 허용하되, 완전히 비어있으면 거부)
