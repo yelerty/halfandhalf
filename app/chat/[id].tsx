@@ -77,9 +77,8 @@ export default function ChatScreen() {
           if (!sessionData.sessionVersion) {
             console.log('Initializing sessionVersion for old session');
             try {
-              const initVersion = Date.now();
               await setDoc(sessionDocRef, {
-                sessionVersion: initVersion,
+                sessionVersion: serverTimestamp(),
               }, { merge: true });
             } catch (error) {
               console.log('Could not initialize sessionVersion:', error);
@@ -354,10 +353,18 @@ export default function ChatScreen() {
     const sessionVersionRef = { current: 0 };
     const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
 
+    // sessionVersion을 타임스탬프(밀리초)로 변환하는 헬퍼 함수
+    const getVersionTimestamp = (version: any): number => {
+      if (!version) return 0;
+      if (version.seconds) return version.seconds * 1000; // Firestore Timestamp
+      if (typeof version === 'number') return version; // 숫자
+      return 0;
+    };
+
     // 먼저 현재 sessionVersion을 한 번 읽기 (초기값 설정)
     getDoc(sessionDocRef).then((snapshot) => {
       if (snapshot.exists()) {
-        const version = snapshot.data()?.sessionVersion || 0;
+        const version = getVersionTimestamp(snapshot.data()?.sessionVersion);
         sessionVersionRef.current = version;
         console.log('Session version loaded:', version);
       }
@@ -369,7 +376,7 @@ export default function ChatScreen() {
       sessionDocRef,
       (sessionSnapshot) => {
         if (sessionSnapshot.exists()) {
-          const newVersion = sessionSnapshot.data()?.sessionVersion || 0;
+          const newVersion = getVersionTimestamp(sessionSnapshot.data()?.sessionVersion);
           sessionVersionRef.current = newVersion;
           console.log('Session version updated:', newVersion);
         }
@@ -527,7 +534,7 @@ export default function ChatScreen() {
           participants,
           activeParticipants: participants, // 양쪽 모두 활성 상태로 시작
           createdAt: serverTimestamp(),
-          sessionVersion: Date.now(), // 세션 버전 추가 - 새 메시지는 이 버전 이후에만 표시
+          sessionVersion: serverTimestamp(), // 세션 버전 추가 - 새 메시지는 이 버전 이후에만 표시
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
         });
@@ -569,17 +576,9 @@ export default function ChatScreen() {
       } else {
         // 세션이 있으면 - 재참여시 sessionVersion 업데이트 (이전 메시지 숨기기)
         const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-        const currentSessionDoc = await getDoc(sessionDocRef);
-        let newSessionVersion = Date.now();
-
-        if (currentSessionDoc.exists()) {
-          const existingVersion = currentSessionDoc.data()?.sessionVersion || 0;
-          // 재참여인 경우 새로운 sessionVersion으로 이전 메시지 숨기기
-          console.log('Rejoining chat - updating sessionVersion from', existingVersion, 'to', newSessionVersion);
-        }
 
         await setDoc(sessionDocRef, {
-          sessionVersion: newSessionVersion,
+          sessionVersion: serverTimestamp(), // 서버 시간으로 이전 메시지 숨기기
           lastMessageAt: serverTimestamp(),
           lastMessage: messageText,
           activeParticipants: participants, // 재참여 시 다시 활성 상태로 변경
