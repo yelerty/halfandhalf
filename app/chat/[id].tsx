@@ -308,14 +308,15 @@ export default function ChatScreen() {
       ]
     );
 
-    // 백그라운드에서 자신의 세션 참조만 삭제 (권한 에러 방지)
+    // 백그라운드에서 자신의 세션 참조만 삭제 (권한 에러 무시)
     if (auth.currentUser && sessionIdFromParams) {
       setTimeout(async () => {
         try {
           await deleteDoc(doc(db, 'users', auth.currentUser!.uid, 'chatSessions', sessionIdFromParams));
           console.log('User session reference cleaned up');
         } catch (error: any) {
-          console.error('Error cleaning up user session reference:', error.code);
+          // 에러 무시 - 중요하지 않음
+          console.log('Could not delete user session reference (ignored)');
         }
       }, 500);
     }
