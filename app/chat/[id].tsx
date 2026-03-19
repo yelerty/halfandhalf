@@ -342,16 +342,10 @@ export default function ChatScreen() {
       q,
       async (snapshot) => {
         console.log('Message subscription fired, got', snapshot.docs.length, 'messages');
-        const messagesData = snapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-          .filter((msg: any) => {
-            // 현재 사용자가 삭제하지 않은 메시지만 표시
-            const deletedBy = msg.deletedBy || [];
-            return !deletedBy.includes(currentUserId);
-          }) as Message[];
+        const messagesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Message[];
 
         console.log('Setting messages. Count:', messagesData.length);
         if (messagesData.length > 0) {
@@ -477,37 +471,31 @@ export default function ChatScreen() {
           postOwnerId: postInfo.userId.substring(0, 8),
         });
 
-        // 0. 먼저 이전 메시지 정리 (같은 sessionId라도 있을 수 있음)
-        // 모든 메시지에 자신을 deletedBy에 추가해서 soft delete
+        // 0. 먼저 이전 메시지 모두 hard delete (강제)
         try {
           const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
           const oldMessagesSnapshot = await getDocs(messagesCollectionRef);
 
           if (oldMessagesSnapshot.docs.length > 0) {
-            console.log('Clearing old messages:', oldMessagesSnapshot.docs.length, 'total');
+            console.log('Force deleting old messages:', oldMessagesSnapshot.docs.length, 'total');
+            let deletedCount = 0;
 
-            // 모든 메시지에 현재 사용자를 deletedBy에 추가 (soft delete)
+            // 모든 메시지 hard delete 시도 (권한 에러 무시)
             for (const messageDoc of oldMessagesSnapshot.docs) {
-              const msgData = messageDoc.data();
-              const deletedBy = msgData.deletedBy || [];
-
-              if (!deletedBy.includes(currentUserId)) {
-                try {
-                  await setDoc(messageDoc.ref, {
-                    deletedBy: [...deletedBy, currentUserId],
-                  }, { merge: true });
-                  console.log('Marked old message as deleted');
-                } catch (error: any) {
-                  console.log('Could not mark message:', error.code);
-                }
+              try {
+                await deleteDoc(messageDoc.ref);
+                deletedCount++;
+              } catch (error: any) {
+                // 권한 에러는 무시하고 계속 진행
+                console.log('Could not delete message:', error.code);
               }
             }
 
-            console.log('Old messages cleanup completed');
+            console.log('Force deleted', deletedCount, 'messages');
           }
         } catch (error: any) {
-          console.log('Could not clean old messages:', error.code);
-          // 계속 진행
+          console.log('Error during message cleanup:', error.code);
+          // 계속 진행 - 메시지 삭제 실패해도 새 세션은 생성
         }
 
         // 1. 채팅 세션 생성
@@ -590,7 +578,6 @@ export default function ChatScreen() {
         senderId: currentUserId,
         createdAt: serverTimestamp(),
         participants,
-        deletedBy: [], // soft delete 추적용 (실제 삭제 아님)
       });
       console.log('Message saved successfully:', docRef.id);
 
@@ -748,29 +735,21 @@ export default function ChatScreen() {
                 const messagesSnapshot = await getDocs(messagesCollectionRef);
 
                 if (messagesSnapshot.docs.length > 0) {
-                  console.log('Marking messages as deleted for:', messagesSnapshot.docs.length, 'total');
-                  let markCount = 0;
+                  console.log('Force deleting all messages:', messagesSnapshot.docs.length, 'total');
+                  let deleteCount = 0;
 
-                  // 모든 메시지에 자신을 deletedBy에 추가 (soft delete)
+                  // 모든 메시지 hard delete 시도 (권한 에러 무시)
                   for (const messageDoc of messagesSnapshot.docs) {
-                    const msgData = messageDoc.data();
-                    const deletedBy = msgData.deletedBy || [];
-
-                    // 이미 자신이 삭제했으면 skip
-                    if (!deletedBy.includes(currentUserId)) {
-                      try {
-                        // 메시지 실제 삭제 아님, deletedBy 배열만 업데이트
-                        await setDoc(messageDoc.ref, {
-                          deletedBy: [...deletedBy, currentUserId],
-                        }, { merge: true });
-                        markCount++;
-                      } catch (error: any) {
-                        console.log('Could not mark message as deleted:', error.code);
-                      }
+                    try {
+                      await deleteDoc(messageDoc.ref);
+                      deleteCount++;
+                    } catch (error: any) {
+                      // 권한 에러는 무시하고 계속 진행
+                      console.log('Could not delete message:', error.code);
                     }
                   }
 
-                  console.log('Marked', markCount, 'messages as deleted for current user');
+                  console.log('Force deleted', deleteCount, 'messages');
                 }
               } catch (deleteError: any) {
                 console.error('Error in cleanup process:', deleteError.code, deleteError.message);
