@@ -39,6 +39,7 @@ export default function ChatScreen() {
   const [sessionExists, setSessionExists] = useState(false);
   const [partnerLeft, setPartnerLeft] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [sessionVersionReady, setSessionVersionReady] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasMarkedAsReadRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -86,6 +87,8 @@ export default function ChatScreen() {
           }
 
           setSessionExists(true);
+          // sessionVersion이 설정되었으므로 메시지 로드 가능
+          setSessionVersionReady(true);
           const postId = sessionData.postId;
 
           // 게시글 정보 가져오기
@@ -334,11 +337,12 @@ export default function ChatScreen() {
       messageUnsubscribeRef.current = null;
     }
 
-    if (!sessionIdFromParams || !auth.currentUser || !sessionExists) {
+    if (!sessionIdFromParams || !auth.currentUser || !sessionExists || !sessionVersionReady) {
       console.log('Message subscription skipped:', {
         sessionIdFromParams,
         hasUser: !!auth.currentUser,
         sessionExists,
+        sessionVersionReady,
       });
       setMessages([]);
       return;
@@ -361,11 +365,18 @@ export default function ChatScreen() {
       return 0;
     };
 
+    let versionLoaded = false;
+
     // 먼저 현재 sessionVersion을 한 번 읽기 (초기값 설정)
     getDoc(sessionDocRef).then((snapshot) => {
       if (snapshot.exists()) {
         const version = getVersionTimestamp(snapshot.data()?.sessionVersion);
         sessionVersionRef.current = version;
+        versionLoaded = true;
+        // sessionVersion이 로드되었으므로 메시지 필터링 시작 가능
+        if (version > 0) {
+          setSessionVersionReady(true);
+        }
         console.log('Session version loaded:', version);
       }
     }).catch((error) => {
@@ -378,6 +389,10 @@ export default function ChatScreen() {
         if (sessionSnapshot.exists()) {
           const newVersion = getVersionTimestamp(sessionSnapshot.data()?.sessionVersion);
           sessionVersionRef.current = newVersion;
+          // 처음 정상적인 버전이 로드되었으면 준비 완료
+          if (newVersion > 0) {
+            setSessionVersionReady(true);
+          }
           console.log('Session version updated:', newVersion);
         }
       },
@@ -463,7 +478,7 @@ export default function ChatScreen() {
       sessionUnsubscribe();
       messageUnsubscribeRef.current = null;
     };
-  }, [sessionIdFromParams, sessionExists]);
+  }, [sessionIdFromParams, sessionExists, sessionVersionReady]);
 
   const handleSend = async () => {
     // 메시지 유효성 체크 (공백은 허용하되, 완전히 비어있으면 거부)
