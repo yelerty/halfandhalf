@@ -807,17 +807,11 @@ export default function ChatScreen() {
                   <Pressable
                     style={[
                       isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
-                      {
-                        maxWidth: screenWidth * 0.9,
-                        width: screenWidth * 0.9,
-                      }
+                      { maxWidth: screenWidth * 0.85 }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    <View style={[
-                      styles.messageContent,
-                      { width: '100%' }
-                    ]}>
+                    <View style={styles.messageContent}>
                       <Text
                         style={isSelf ? styles.messageTextSelf : styles.messageText}
                         numberOfLines={0}
@@ -921,7 +915,6 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     flexDirection: 'column',
-    alignItems: 'stretch',
   },
   dateSeparator: {
     alignItems: 'center',
