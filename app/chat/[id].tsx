@@ -817,14 +817,15 @@ export default function ChatScreen() {
                     <View style={[
                       styles.messageContent,
                       Platform.OS === 'android' && {
-                        width: screenWidth * 0.85 - 20, // 패딩 제외 (10+10)
+                        maxWidth: screenWidth * 0.85 - 20, // 패딩 제외 (10+10)
+                        width: '100%',
                       }
                     ]}>
                       <Text
                         style={[
                           isSelf ? styles.messageTextSelf : styles.messageText,
                           Platform.OS === 'android' && {
-                            width: screenWidth * 0.85 - 20,
+                            maxWidth: screenWidth * 0.85 - 20,
                           }
                         ]}
                         numberOfLines={0}
