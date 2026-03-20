@@ -338,11 +338,20 @@ export default function ChatScreen() {
 
     console.log('Setting up message subscription for:', sessionIdFromParams);
     const currentUserId = auth.currentUser.uid;
+    let sessionCreatedAt: any = null;
 
     // 먼저 세션 정보 가져오기 (createdAt 확인)
-    const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-    const sessionDoc = await getDoc(sessionDocRef);
-    const sessionCreatedAt = sessionDoc.exists() ? sessionDoc.data()?.createdAt : null;
+    const loadSessionInfo = async () => {
+      try {
+        const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+        const sessionDoc = await getDoc(sessionDocRef);
+        sessionCreatedAt = sessionDoc.exists() ? sessionDoc.data()?.createdAt : null;
+      } catch (error) {
+        console.log('Error loading session info:', error);
+      }
+    };
+
+    loadSessionInfo();
 
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
