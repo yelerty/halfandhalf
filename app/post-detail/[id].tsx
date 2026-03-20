@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import i18n from '../../i18n';
 
@@ -30,6 +30,7 @@ export default function PostDetailScreen() {
 
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [existingSessionId, setExistingSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPostDetail();
@@ -46,10 +47,16 @@ export default function PostDetailScreen() {
       const postDoc = await getDoc(doc(db, 'posts', postId));
 
       if (postDoc.exists()) {
-        setPost({
+        const postData = {
           id: postDoc.id,
           ...postDoc.data(),
-        } as PostDetail);
+        } as PostDetail;
+        setPost(postData);
+
+        // 기존 채팅 세션 확인
+        if (auth.currentUser) {
+          await checkExistingSession(auth.currentUser.uid, postData.userId);
+        }
       } else {
         Alert.alert(i18n.t('common.error'), i18n.t('postDetail.notFound'), [
           { text: i18n.t('common.confirm'), onPress: () => router.back() }
@@ -60,6 +67,36 @@ export default function PostDetailScreen() {
       router.back();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkExistingSession = async (currentUserId: string, postOwnerId: string) => {
+    try {
+      const participants = [currentUserId, postOwnerId].sort();
+
+      // 현재 사용자의 chatSessions에서 해당 상대방과의 모든 세션 조회
+      const userSessionsRef = collection(db, 'users', currentUserId, 'chatSessions');
+      const q = query(userSessionsRef, orderBy('lastMessageAt', 'desc'));
+      const snapshot = await getDocs(q);
+
+      // 해당 상대방과의 세션만 필터링 (참여자 확인)
+      for (const doc of snapshot.docs) {
+        const sessionData = doc.data();
+        // sessionId에서 참여자 추출하여 확인
+        const sessionId = sessionData.sessionId;
+
+        // sessionId 형식: postId_user1_user2 또는 postId_user1_user2_timestamp
+        // 참여자가 일치하는지 확인
+        if (sessionId && sessionId.includes(postOwnerId)) {
+          setExistingSessionId(sessionId);
+          return; // 첫 번째(가장 최근) 세션만 사용
+        }
+      }
+
+      setExistingSessionId(null);
+    } catch (error) {
+      console.log('Error checking existing session:', error);
+      setExistingSessionId(null);
     }
   };
 
@@ -74,8 +111,15 @@ export default function PostDetailScreen() {
 
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, post.userId].sort();
-    // 기존 세션이 있으면 재사용, 없으면 채팅/[id].tsx에서 새로 생성
-    const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
+
+    // 기존 세션이 있으면 그걸 사용, 없으면 새로운 sessionId 생성 (timestamp 포함)
+    let sessionId: string;
+    if (existingSessionId) {
+      sessionId = existingSessionId;
+    } else {
+      const timestamp = Date.now();
+      sessionId = `${post.id}_${participants[0]}_${participants[1]}_${timestamp}`;
+    }
 
     router.push({
       pathname: `/chat/${sessionId}`,
@@ -191,7 +235,9 @@ export default function PostDetailScreen() {
           <View style={styles.footer}>
             <TouchableOpacity style={styles.chatButton} onPress={handleStartChat}>
               <Ionicons name="chatbubble" size={20} color="white" />
-              <Text style={styles.chatButtonText}>{i18n.t('postDetail.startChat')}</Text>
+              <Text style={styles.chatButtonText}>
+                {existingSessionId ? '채팅으로 가기' : i18n.t('postDetail.startChat')}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
