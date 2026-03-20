@@ -809,7 +809,7 @@ export default function ChatScreen() {
                       isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
                       {
                         maxWidth: screenWidth * 0.85,
-                        width: screenWidth * 0.85,
+                        flexShrink: 1,
                       }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
