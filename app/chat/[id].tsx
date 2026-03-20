@@ -883,25 +883,25 @@ const styles = StyleSheet.create({
   },
   messageOtherContainer: {
     backgroundColor: 'white',
-    paddingHorizontal: Platform.OS === 'android' ? 8 : 10,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '95%',
+    maxWidth: '85%',
     alignSelf: 'flex-start',
-    flexShrink: 1,
     marginTop: 2,
+    flexDirection: 'column',
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
-    paddingHorizontal: Platform.OS === 'android' ? 8 : 10,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '95%',
+    maxWidth: '85%',
     alignSelf: 'flex-end',
-    flexShrink: 1,
     marginTop: 2,
+    flexDirection: 'column',
   },
   dateSeparator: {
     alignItems: 'center',
@@ -920,7 +920,6 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 18,
     flexWrap: 'wrap',
-    width: '100%',
     ...Platform.select({
       android: {
         includeFontPadding: false,
@@ -933,7 +932,6 @@ const styles = StyleSheet.create({
     color: 'white',
     lineHeight: 18,
     flexWrap: 'wrap',
-    width: '100%',
     ...Platform.select({
       android: {
         includeFontPadding: false,
