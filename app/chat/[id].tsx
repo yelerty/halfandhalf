@@ -810,23 +810,25 @@ export default function ChatScreen() {
                       {
                         maxWidth: screenWidth * 0.85,
                         flexShrink: 1,
-                      },
-                      Platform.OS === 'android' && {
-                        width: screenWidth * 0.85,
                       }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    <Text
-                      style={isSelf ? styles.messageTextSelf : styles.messageText}
-                      numberOfLines={0}
-                      allowFontScaling={false}
-                    >
-                      {msg.text}
-                    </Text>
-                    <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
-                      {formatMessageTime(msg.createdAt)}
-                    </Text>
+                    <View style={[
+                      styles.messageContent,
+                      Platform.OS === 'android' && { maxWidth: screenWidth * 0.85 }
+                    ]}>
+                      <Text
+                        style={isSelf ? styles.messageTextSelf : styles.messageText}
+                        numberOfLines={0}
+                        allowFontScaling={false}
+                      >
+                        {msg.text}
+                      </Text>
+                      <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
+                        {formatMessageTime(msg.createdAt)}
+                      </Text>
+                    </View>
                   </Pressable>
                 </View>
               );
