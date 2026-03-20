@@ -897,7 +897,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Platform.OS === 'android' ? 0 : 8,
     paddingTop: 8,
     paddingBottom: 8,
     flexGrow: 1,
