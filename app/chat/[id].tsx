@@ -810,17 +810,15 @@ export default function ChatScreen() {
                       {
                         maxWidth: screenWidth * 0.85,
                         flexShrink: 1,
+                      },
+                      Platform.OS === 'android' && {
+                        width: screenWidth * 0.82,
                       }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
                     <Text
-                      style={[
-                        isSelf ? styles.messageTextSelf : styles.messageText,
-                        Platform.OS === 'android' && {
-                          maxWidth: screenWidth * 0.80,
-                        }
-                      ]}
+                      style={isSelf ? styles.messageTextSelf : styles.messageText}
                       numberOfLines={0}
                       allowFontScaling={false}
                     >
