@@ -807,11 +807,17 @@ export default function ChatScreen() {
                   <Pressable
                     style={[
                       isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
-                      { maxWidth: screenWidth * 0.9 }
+                      {
+                        maxWidth: screenWidth * 0.9,
+                        width: screenWidth * 0.9,
+                      }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    <View style={styles.messageContent}>
+                    <View style={[
+                      styles.messageContent,
+                      { width: '100%' }
+                    ]}>
                       <Text
                         style={isSelf ? styles.messageTextSelf : styles.messageText}
                         numberOfLines={0}
