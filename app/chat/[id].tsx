@@ -915,6 +915,7 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     flexDirection: 'column',
+    maxWidth: '100%',
   },
   dateSeparator: {
     alignItems: 'center',
