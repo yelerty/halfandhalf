@@ -490,6 +490,20 @@ export default function ChatScreen() {
           postOwnerId: postInfo.userId.substring(0, 8),
         });
 
+        // 0. 이전 메시지 삭제 (같은 sessionId의 이전 메시지들 제거)
+        try {
+          const oldMessagesRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
+          const oldMessagesSnapshot = await getDocs(oldMessagesRef);
+          for (const oldMsg of oldMessagesSnapshot.docs) {
+            await deleteDoc(oldMsg.ref);
+          }
+          if (oldMessagesSnapshot.docs.length > 0) {
+            console.log('Old messages deleted:', oldMessagesSnapshot.docs.length);
+          }
+        } catch (deleteError) {
+          console.log('Could not delete old messages:', deleteError);
+        }
+
         // 1. 채팅 세션 생성 (이전 메시지는 자동으로 숨겨짐)
         await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
