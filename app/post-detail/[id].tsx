@@ -74,9 +74,8 @@ export default function PostDetailScreen() {
 
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, post.userId].sort();
-    // timestamp 추가: 매번 새로운 sessionId 생성 (이전 메시지 안 보임)
-    const timestamp = Date.now();
-    const sessionId = `${post.id}_${participants[0]}_${participants[1]}_${timestamp}`;
+    // 기존 세션이 있으면 재사용, 없으면 채팅/[id].tsx에서 새로 생성
+    const sessionId = `${post.id}_${participants[0]}_${participants[1]}`;
 
     router.push({
       pathname: `/chat/${sessionId}`,
