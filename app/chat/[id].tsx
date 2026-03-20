@@ -807,9 +807,11 @@ export default function ChatScreen() {
                   <Pressable
                     style={[
                       isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
-                      {
+                      Platform.OS === 'ios' ? {
                         maxWidth: screenWidth * 0.85,
                         flexShrink: 1,
+                      } : {
+                        width: screenWidth * 0.82,
                       }
                     ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
@@ -898,21 +900,19 @@ const styles = StyleSheet.create({
   },
   messageOtherContainer: {
     backgroundColor: 'white',
-    paddingHorizontal: Platform.OS === 'android' ? 0 : 10,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    marginHorizontal: Platform.OS === 'android' ? 10 : 0,
     alignSelf: 'flex-start',
     marginTop: 2,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
-    paddingHorizontal: Platform.OS === 'android' ? 0 : 10,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    marginHorizontal: Platform.OS === 'android' ? 10 : 0,
     alignSelf: 'flex-end',
     marginTop: 2,
   },
