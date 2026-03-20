@@ -338,18 +338,39 @@ export default function ChatScreen() {
 
     console.log('Setting up message subscription for:', sessionIdFromParams);
     const currentUserId = auth.currentUser.uid;
+
+    // 먼저 세션 정보 가져오기 (createdAt 확인)
+    const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
+    const sessionDoc = await getDoc(sessionDocRef);
+    const sessionCreatedAt = sessionDoc.exists() ? sessionDoc.data()?.createdAt : null;
+
     const messagesCollectionRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
     const q = query(messagesCollectionRef, orderBy('createdAt', 'asc'));
-
 
     const unsubscribe = onSnapshot(
       q,
       async (snapshot) => {
         console.log('Message subscription fired, got', snapshot.docs.length, 'messages');
-        const messagesData = snapshot.docs.map(doc => ({
+        let messagesData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Message[];
+
+        // 세션 생성 시간 이후의 메시지만 필터링 (이전 메시지 제외)
+        if (sessionCreatedAt) {
+          const sessionTime = typeof sessionCreatedAt.toDate === 'function'
+            ? sessionCreatedAt.toDate().getTime()
+            : (sessionCreatedAt.seconds ? sessionCreatedAt.seconds * 1000 : 0);
+
+          messagesData = messagesData.filter(msg => {
+            const msgTime = typeof msg.createdAt?.toDate === 'function'
+              ? msg.createdAt.toDate().getTime()
+              : (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : 0);
+            return msgTime >= sessionTime;
+          });
+
+          console.log('Filtered messages after session creation time:', messagesData.length);
+        }
 
         console.log('Setting messages. Count:', messagesData.length);
         setMessages(messagesData);
