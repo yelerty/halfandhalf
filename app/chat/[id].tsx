@@ -125,7 +125,8 @@ export default function ChatScreen() {
             );
           }
         } else if (postIdFromParams) {
-          console.log('Chat session does not exist yet, setting sessionExists=false');
+          console.log('🔴 Chat session does not exist yet, setting sessionExists=false');
+          console.log('🔴 postIdFromParams:', postIdFromParams);
           // 세션이 없지만 params에서 게시글 정보가 있으면 (새 채팅)
           setSessionExists(false);
           setPostInfo({
@@ -156,6 +157,7 @@ export default function ChatScreen() {
       } catch (error: any) {
         // permission-denied는 세션이 아직 없는 정상 케이스
         if (error.code === 'permission-denied' && postIdFromParams) {
+          console.log('🔴 Session not found (permission-denied), setting sessionExists=false');
           setSessionExists(false);
           setPostInfo({
             id: postIdFromParams,
@@ -170,6 +172,7 @@ export default function ChatScreen() {
           Alert.alert(i18n.t('common.error'), i18n.t('chat.sendError'));
         }
       }
+      console.log('🔴 loadChatSession completed, sessionExists:', sessionExists);
     };
 
     console.log('🟡 Calling loadChatSession');
