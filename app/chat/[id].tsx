@@ -911,7 +911,7 @@ const styles = StyleSheet.create({
   },
   messageOtherContainer: {
     backgroundColor: 'white',
-    paddingHorizontal: 10,
+    paddingHorizontal: Platform.OS === 'android' ? 6 : 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
-    paddingHorizontal: 10,
+    paddingHorizontal: Platform.OS === 'android' ? 6 : 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
