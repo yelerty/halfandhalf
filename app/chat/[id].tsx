@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView, Pressable, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ export default function ChatScreen() {
   console.log('🔵 ChatScreen component mounted');
   const params = useLocalSearchParams();
   const sessionIdFromParams = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { width: screenWidth } = useWindowDimensions();
   console.log('🔵 sessionIdFromParams:', sessionIdFromParams);
 
   // params에서 게시글 정보 추출 (새 채팅인 경우)
@@ -788,6 +789,14 @@ export default function ChatScreen() {
               const prevMsg = messages[index - 1];
               const showDateSeparator = index === 0 || !isSameDay(msgDate, toDate(prevMsg.createdAt));
 
+              if (index === messages.length - 1) {
+                console.log('Last message text:', {
+                  length: msg.text.length,
+                  preview: msg.text.substring(0, 50) + (msg.text.length > 50 ? '...' : ''),
+                  isSelf,
+                });
+              }
+
               return (
                 <View key={msg.id}>
                   {showDateSeparator && (
@@ -796,7 +805,10 @@ export default function ChatScreen() {
                     </View>
                   )}
                   <Pressable
-                    style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
+                    style={[
+                      isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
+                      { maxWidth: screenWidth * 0.9 }
+                    ]}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
                     <View style={styles.messageContent}>
@@ -889,7 +901,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '95%',
     alignSelf: 'flex-start',
     marginTop: 2,
   },
@@ -899,7 +910,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '95%',
     alignSelf: 'flex-end',
     marginTop: 2,
   },
