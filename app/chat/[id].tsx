@@ -799,16 +799,18 @@ export default function ChatScreen() {
                     style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
                     onLongPress={() => handleCopyMessage(msg.text)}
                   >
-                    <Text
-                      style={isSelf ? styles.messageTextSelf : styles.messageText}
-                      numberOfLines={0}
-                      allowFontScaling={false}
-                    >
-                      {msg.text}
-                    </Text>
-                    <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
-                      {formatMessageTime(msg.createdAt)}
-                    </Text>
+                    <View style={styles.messageContent}>
+                      <Text
+                        style={isSelf ? styles.messageTextSelf : styles.messageText}
+                        numberOfLines={0}
+                        allowFontScaling={false}
+                      >
+                        {msg.text}
+                      </Text>
+                      <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
+                        {formatMessageTime(msg.createdAt)}
+                      </Text>
+                    </View>
                   </Pressable>
                 </View>
               );
@@ -887,10 +889,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '85%',
+    maxWidth: '95%',
     alignSelf: 'flex-start',
     marginTop: 2,
-    flexDirection: 'column',
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
@@ -898,10 +899,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 4,
-    maxWidth: '85%',
+    maxWidth: '95%',
     alignSelf: 'flex-end',
     marginTop: 2,
+  },
+  messageContent: {
     flexDirection: 'column',
+    alignItems: 'stretch',
   },
   dateSeparator: {
     alignItems: 'center',
