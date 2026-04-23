@@ -1,12 +1,17 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import { pickImage, uploadPostImages, MAX_IMAGES } from '../utils/imageUpload';
+import { POST_CATEGORIES, CategoryId } from '../constants/categories';
+import { useSubscription } from '../utils/SubscriptionContext';
+import { canCreatePost, incrementPostCount } from '../utils/subscription';
+import UpgradePrompt from '../components/UpgradePrompt';
 import i18n from '../i18n';
 
 const MAX_STORE_HISTORY = 2;
@@ -15,6 +20,8 @@ const MAX_ITEMS = 10;
 
 export default function CreatePostScreen() {
   const router = useRouter();
+  const { isPremium } = useSubscription();
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [store, setStore] = useState('');
   const [items, setItems] = useState<string[]>(['']);
   const [date, setDate] = useState(new Date());
@@ -24,7 +31,9 @@ export default function CreatePostScreen() {
     end.setHours(end.getHours() + 2);
     return end;
   });
-  const [hasDateTime, setHasDateTime] = useState(false);
+  const [hasDate, setHasDate] = useState(false);
+  const [hasTime, setHasTime] = useState(false);
+  const [endDate, setEndDate] = useState(new Date());
   const [storeHistory, setStoreHistory] = useState<string[]>([]);
   const [itemHistory, setItemHistory] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -32,6 +41,8 @@ export default function CreatePostScreen() {
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [category, setCategory] = useState<CategoryId | null>(null);
+  const [images, setImages] = useState<string[]>([]);
 
   // 매장 히스토리 로드
   useEffect(() => {
@@ -98,20 +109,30 @@ export default function CreatePostScreen() {
     };
   }, []);
 
+  // 종료시간이 시작시간보다 빠르면 종료일을 다음날로 자동 설정
+  const updateEndDate = (start: Date, end: Date) => {
+    const startMinutes = start.getHours() * 60 + start.getMinutes();
+    const endMinutes = end.getHours() * 60 + end.getMinutes();
+    const newEndDate = new Date(date);
+    if (endMinutes <= startMinutes) {
+      newEndDate.setDate(newEndDate.getDate() + 1);
+    }
+    setEndDate(newEndDate);
+  };
+
   // 시작시간이 변경되면 종료시간을 자동으로 +2시간 설정
-  // 종료시간이 자정을 넘어가면 시작 날짜를 다음날로 자동 설정
   const handleStartTimeChange = (selectedTime: Date) => {
     setStartTime(selectedTime);
     const newEndTime = new Date(selectedTime);
     newEndTime.setHours(newEndTime.getHours() + 2);
     setEndTime(newEndTime);
+    updateEndDate(selectedTime, newEndTime);
+  };
 
-    // 종료시간이 다음날(자정 이후)로 넘어가면 시작 날짜를 다음날로 설정
-    if (newEndTime.getDate() > selectedTime.getDate()) {
-      const newDate = new Date(date);
-      newDate.setDate(newDate.getDate() + 1);
-      setDate(newDate);
-    }
+  // 종료시간 변경 시 종료일 자동 계산
+  const handleEndTimeChange = (selectedTime: Date) => {
+    setEndTime(selectedTime);
+    updateEndDate(startTime, selectedTime);
   };
 
   // 매장명 선택 시 히스토리에 저장
@@ -209,10 +230,7 @@ export default function CreatePostScreen() {
       return false;
     }
 
-    if (hasDateTime && endTime <= startTime) {
-      Alert.alert(i18n.t('common.error'), '종료시간은 시작시간보다 늦어야 합니다.');
-      return false;
-    }
+    // 시간 설정 시: 종료일+종료시간이 시작일+시작시간보다 빠른 경우는 자동 보정되므로 별도 검증 불필요
 
     if (!auth.currentUser) {
       Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
@@ -229,6 +247,12 @@ export default function CreatePostScreen() {
 
     if (!auth.currentUser) {
       Alert.alert(i18n.t('common.error'), i18n.t('auth.login'));
+      return;
+    }
+
+    const allowed = await canCreatePost(auth.currentUser.uid, isPremium);
+    if (!allowed) {
+      setShowUpgrade(true);
       return;
     }
 
@@ -262,17 +286,34 @@ export default function CreatePostScreen() {
         createdAt: serverTimestamp(),
       };
 
-      // 날짜/시간이 활성화된 경우에만 저장
-      if (hasDateTime) {
-        postData.date = formatDate(date);
-        postData.startTime = formatTime(startTime);
-        postData.endTime = formatTime(endTime);
+      // 카테고리가 선택된 경우 저장
+      if (category) {
+        postData.category = category;
       }
-      // hasDateTime이 false면 시간 필드를 아예 저장하지 않음
+
+      // 날짜가 활성화된 경우 저장
+      if (hasDate) {
+        postData.date = formatDate(date);
+        // 시간도 활성화된 경우 저장
+        if (hasTime) {
+          postData.startTime = formatTime(startTime);
+          postData.endTime = formatTime(endTime);
+          // 종료일이 시작일과 다르면 저장
+          if (formatDate(endDate) !== formatDate(date)) {
+            postData.endDate = formatDate(endDate);
+          }
+        }
+      }
 
       console.log('전송할 데이터:', postData);
       const docRef = await addDoc(collection(db, 'posts'), postData);
       console.log('게시글 생성 성공:', docRef.id);
+
+      // 이미지 업로드 (게시글 생성 후)
+      if (images.length > 0) {
+        const imageUrls = await uploadPostImages(images, docRef.id);
+        await updateDoc(doc(db, 'posts', docRef.id), { imageUrls });
+      }
 
       // 히스토리에 매장명과 물건명 저장
       await saveStoreToHistory(store.trim());
@@ -280,6 +321,7 @@ export default function CreatePostScreen() {
         await saveItemToHistory(item);
       }
 
+      await incrementPostCount();
       Alert.alert(i18n.t('common.success'), i18n.t('createPost.success'));
       router.back();
     } catch (error: any) {
@@ -293,6 +335,11 @@ export default function CreatePostScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      <UpgradePrompt
+        visible={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        message={i18n.t('subscription.limits.postLimitReached')}
+      />
       <View style={styles.content}>
         <Text style={styles.label}>{i18n.t('createPost.store')}</Text>
         <TextInput
@@ -318,6 +365,23 @@ export default function CreatePostScreen() {
             </View>
           </View>
         )}
+
+        <Text style={styles.label}>{i18n.t('categories.title')}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+          <View style={styles.categoryRow}>
+            {POST_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[styles.categoryChip, category === cat.id && styles.categoryChipActive]}
+                onPress={() => setCategory(category === cat.id ? null : cat.id)}
+              >
+                <Text style={[styles.categoryChipText, category === cat.id && styles.categoryChipTextActive]}>
+                  {i18n.t(cat.labelKey)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
 
         <View style={styles.itemsHeader}>
           <Text style={styles.label}>{i18n.t('createPost.item')}</Text>
@@ -364,19 +428,55 @@ export default function CreatePostScreen() {
           </TouchableOpacity>
         )}
 
+        <Text style={styles.label}>{i18n.t('images.addPhoto')}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
+          <View style={styles.imageRow}>
+            {images.map((uri, index) => (
+              <View key={index} style={styles.imageWrapper}>
+                <Image source={{ uri }} style={styles.imageThumb} />
+                <TouchableOpacity
+                  style={styles.imageRemoveButton}
+                  onPress={() => setImages(images.filter((_, i) => i !== index))}
+                >
+                  <Text style={styles.imageRemoveText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            {images.length < MAX_IMAGES && (
+              <TouchableOpacity
+                style={styles.imageAddButton}
+                onPress={async () => {
+                  const uri = await pickImage();
+                  if (uri) setImages([...images, uri]);
+                }}
+              >
+                <Text style={styles.imageAddText}>+</Text>
+                <Text style={styles.imageAddSubtext}>{images.length}/{MAX_IMAGES}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+
         <View style={styles.dateHeader}>
           <Text style={styles.label}>{i18n.t('createPost.date')}</Text>
           <TouchableOpacity
-            style={[styles.toggleButton, hasDateTime && styles.toggleButtonActive]}
-            onPress={() => setHasDateTime(!hasDateTime)}
+            style={[styles.toggleButton, hasDate && styles.toggleButtonActive]}
+            onPress={() => {
+              if (hasDate) {
+                setHasDate(false);
+                setHasTime(false);
+              } else {
+                setHasDate(true);
+              }
+            }}
           >
             <Text style={styles.toggleButtonText}>
-              {hasDateTime ? '설정' : '설정 안함'}
+              {hasDate ? '설정' : '설정 안함'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {hasDateTime && (
+        {hasDate && (
           <>
             <TouchableOpacity
               style={styles.input}
@@ -385,21 +485,39 @@ export default function CreatePostScreen() {
               <Text style={styles.dateText}>{formatDate(date)}</Text>
             </TouchableOpacity>
 
-            <Text style={styles.label}>{i18n.t('createPost.startTime')}</Text>
-            <TouchableOpacity
-              style={styles.input}
-              onPress={() => setShowStartTimePicker(true)}
-            >
-              <Text style={styles.dateText}>{formatTime(startTime)}</Text>
-            </TouchableOpacity>
+            <View style={styles.dateHeader}>
+              <Text style={styles.label}>{i18n.t('createPost.startTime')}</Text>
+              <TouchableOpacity
+                style={[styles.toggleButton, hasTime && styles.toggleButtonActive]}
+                onPress={() => setHasTime(!hasTime)}
+              >
+                <Text style={styles.toggleButtonText}>
+                  {hasTime ? '설정' : '설정 안함'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            <Text style={styles.label}>{i18n.t('createPost.endTime')}</Text>
-            <TouchableOpacity
-              style={styles.input}
-              onPress={() => setShowEndTimePicker(true)}
-            >
-              <Text style={styles.dateText}>{formatTime(endTime)}</Text>
-            </TouchableOpacity>
+            {hasTime && (
+              <>
+                <TouchableOpacity
+                  style={styles.input}
+                  onPress={() => setShowStartTimePicker(true)}
+                >
+                  <Text style={styles.dateText}>{formatTime(startTime)}</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.label}>{i18n.t('createPost.endTime')}</Text>
+                <TouchableOpacity
+                  style={styles.input}
+                  onPress={() => setShowEndTimePicker(true)}
+                >
+                  <Text style={styles.dateText}>
+                    {formatTime(endTime)}
+                    {formatDate(endDate) !== formatDate(date) ? ` (${formatDate(endDate)})` : ''}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </>
         )}
 
@@ -412,6 +530,16 @@ export default function CreatePostScreen() {
               setShowDatePicker(false);
               if (selectedDate) {
                 setDate(selectedDate);
+                // 시간 설정 시 종료일도 재계산
+                if (hasTime) {
+                  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                  const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+                  const newEndDate = new Date(selectedDate);
+                  if (endMinutes <= startMinutes) {
+                    newEndDate.setDate(newEndDate.getDate() + 1);
+                  }
+                  setEndDate(newEndDate);
+                }
               }
             }}
           />
@@ -439,7 +567,7 @@ export default function CreatePostScreen() {
             onChange={(event, selectedTime) => {
               setShowEndTimePicker(false);
               if (selectedTime) {
-                setEndTime(selectedTime);
+                handleEndTimeChange(selectedTime);
               }
             }}
           />
@@ -575,6 +703,83 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
     fontSize: 13,
     fontWeight: '500',
+  },
+  categoryScroll: {
+    marginBottom: 4,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#f5f5f5',
+  },
+  categoryChipActive: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  categoryChipText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#2E7D32',
+  },
+  imageScroll: {
+    marginBottom: 4,
+  },
+  imageRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  imageWrapper: {
+    position: 'relative',
+  },
+  imageThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  imageRemoveButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ff5252',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageRemoveText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  imageAddButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+  },
+  imageAddText: {
+    fontSize: 24,
+    color: '#999',
+  },
+  imageAddSubtext: {
+    fontSize: 11,
+    color: '#999',
   },
   button: {
     backgroundColor: '#4CAF50',

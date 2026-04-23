@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AdBanner from '../../components/AdBanner';
 import { useEffect, useState, useCallback } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
@@ -400,6 +401,7 @@ export default function MyPostsScreen() {
       >
         <Ionicons name="add" size={32} color="white" />
       </TouchableOpacity>
+      <AdBanner />
     </View>
   );
 }

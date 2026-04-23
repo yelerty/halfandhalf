@@ -7,6 +7,34 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "buildReactNativeFromSource": true
+          }
+        }
+      ],
+      "./plugins/withModularHeaders",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "게시글에 사진을 첨부하기 위해 사진 접근 권한이 필요합니다."
+        }
+      ],
+      "expo-notifications",
+      "expo-router",
+      "expo-web-browser",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX",
+          "iosAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
+        }
+      ]
+    ],
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -16,7 +44,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.halfandhalf.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "주변 대형마트를 찾기 위해 위치 정보가 필요합니다."
+        "NSLocationWhenInUseUsageDescription": "주변 대형마트를 찾기 위해 위치 정보가 필요합니다.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,12 +55,19 @@
       },
       "package": "com.halfandhalf.app",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b40e9c02-e6b1-4bf5-8725-0c0b54f33665"
+      }
+    },
+    "owner": "jihongpark"
   }
 }

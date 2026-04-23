@@ -3,12 +3,48 @@ import { useEffect, useState } from 'react';
 import { onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import {
+  registerForPushNotificationsAsync,
+  savePushToken,
+  setupNotificationHandler,
+  addNotificationResponseListener,
+} from '../utils/notifications';
+import { SubscriptionProvider } from '../utils/SubscriptionContext';
+import { initRevenueCat, loginRevenueCat } from '../utils/subscription';
+
+// 포그라운드 알림 핸들러 설정
+setupNotificationHandler();
 
 export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
+
+  // RevenueCat 초기화
+  useEffect(() => {
+    initRevenueCat();
+  }, []);
+
+  // 푸시 알림 등록 및 리스너 설정
+  useEffect(() => {
+    if (!user) return;
+
+    // RevenueCat 로그인
+    loginRevenueCat(user.uid).catch(() => {});
+
+    // 푸시 토큰 등록
+    registerForPushNotificationsAsync().then(token => {
+      if (token) savePushToken(user.uid, token);
+    });
+
+    // 알림 탭 시 채팅 화면으로 이동
+    const cleanup = addNotificationResponseListener((sessionId) => {
+      router.push(`/chat/${sessionId}`);
+    });
+
+    return cleanup;
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -54,8 +90,19 @@ export default function RootLayout() {
       // 로그인 안되어있으면 로그인 화면으로
       router.replace('/login');
     } else if (user && segments[0] === 'login') {
-      // 로그인 되어있으면 메인으로
-      router.replace('/(tabs)');
+      // 이메일/비밀번호 로그인이면서 이메일 인증이 안 된 경우
+      const isEmailProvider = user.providerData.some(p => p.providerId === 'password');
+      if (isEmailProvider && !user.emailVerified) {
+        router.replace('/verify-email');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } else if (user && inAuthGroup) {
+      // 보호된 페이지 접근 시 이메일 인증 확인
+      const isEmailProvider = user.providerData.some(p => p.providerId === 'password');
+      if (isEmailProvider && !user.emailVerified) {
+        router.replace('/verify-email');
+      }
     }
   }, [user, segments, loading]);
 
@@ -69,19 +116,24 @@ export default function RootLayout() {
     return (
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-email" options={{ headerShown: false }} />
       </Stack>
     );
   }
 
   // 로그인된 상태에서만 전체 스택 렌더링
   return (
-    <Stack>
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="create-post" options={{ title: '공동구매 등록', presentation: 'modal' }} />
-      <Stack.Screen name="post-detail/[id]" options={{ title: '게시글 상세' }} />
-      <Stack.Screen name="edit-post/[id]" options={{ title: '게시글 수정' }} />
-      <Stack.Screen name="chat/[id]" options={{ title: '채팅' }} />
-    </Stack>
+    <SubscriptionProvider>
+      <Stack>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="create-post" options={{ title: '공동구매 등록', presentation: 'modal' }} />
+        <Stack.Screen name="post-detail/[id]" options={{ title: '게시글 상세' }} />
+        <Stack.Screen name="edit-post/[id]" options={{ title: '게시글 수정' }} />
+        <Stack.Screen name="chat/[id]" options={{ title: '채팅' }} />
+        <Stack.Screen name="subscription" options={{ title: '구독 관리' }} />
+      </Stack>
+    </SubscriptionProvider>
   );
 }

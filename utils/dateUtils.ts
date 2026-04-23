@@ -37,24 +37,33 @@ export function parseTime(timeStr: string): Date {
 
 /**
  * 게시글의 만료 여부를 확인
- * 시간 정보가 없으면 만료되지 않은 것으로 간주 (시간 미설정 공동구매)
+ * 시간 정보가 없으면 날짜만으로 판단, 날짜도 없으면 만료되지 않은 것으로 간주
  */
-export function isPostExpired(post: { date?: string; endTime?: string }): boolean {
+export function isPostExpired(post: { date?: string; endDate?: string; endTime?: string }): boolean {
   const now = new Date();
 
-  // endTime이 없으면 만료되지 않은 것으로 간주 (시간 설정 없이 등록된 공동구매)
-  if (!post.endTime) {
+  // 날짜와 시간 모두 없으면 만료되지 않은 것으로 간주
+  if (!post.date && !post.endTime) {
     return false;
   }
 
-  if (post.date && post.endTime) {
-    const postEndDateTime = new Date(`${post.date}T${post.endTime}:00`);
-    return postEndDateTime < now;
-  } else if (post.endTime) {
-    // 날짜가 없는 경우 (기존 게시글 호환성)
-    const today = now.toISOString().split('T')[0];
-    const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
-    return postEndDateTime < now;
+  // 시간이 있는 경우: endDate(있으면) 또는 date + endTime으로 판단
+  if (post.endTime) {
+    const endDateStr = post.endDate || post.date;
+    if (endDateStr) {
+      const postEndDateTime = new Date(`${endDateStr}T${post.endTime}:00`);
+      return postEndDateTime < now;
+    } else {
+      const today = now.toISOString().split('T')[0];
+      const postEndDateTime = new Date(`${today}T${post.endTime}:00`);
+      return postEndDateTime < now;
+    }
+  }
+
+  // 날짜만 있는 경우: 해당 날짜의 끝(23:59:59)까지 유효
+  if (post.date) {
+    const postEndOfDay = new Date(`${post.date}T23:59:59`);
+    return postEndOfDay < now;
   }
 
   return false;

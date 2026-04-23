@@ -34,6 +34,28 @@ export default {
     fillAllFields: '모든 필드를 입력해주세요',
     loginSuccess: '로그인 성공!',
     registerSuccess: '회원가입 성공!',
+    // 소셜 로그인
+    kakaoLogin: '카카오로 시작하기',
+    naverLogin: '네이버로 시작하기',
+    instagramLogin: '인스타그램으로 시작하기',
+    orDivider: '또는',
+    // 이메일 인증
+    verificationHint: '회원가입 후 이메일 인증이 필요합니다.',
+    verifyEmailTitle: '이메일 인증',
+    verifyEmailDesc: '아래 이메일로 인증 링크를 보냈습니다.\n이메일을 확인하고 링크를 클릭해주세요.',
+    resendVerification: '인증 메일 재전송',
+    verificationSent: '인증 메일을 다시 보냈습니다.',
+    verificationSendError: '인증 메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요.',
+    backToLogin: '로그인 화면으로 돌아가기',
+    // 비밀번호 재설정
+    forgotPassword: '비밀번호를 잊으셨나요?',
+    resetPassword: '비밀번호 재설정',
+    enterEmailForReset: '비밀번호를 재설정할 이메일을 먼저 입력해주세요.',
+    invalidEmail: '올바른 이메일 형식을 입력해주세요.',
+    resetEmailSent: '비밀번호 재설정 메일을 보냈습니다. 이메일을 확인해주세요.',
+    emailInUseTitle: '이미 등록된 이메일',
+    emailInUseMessage: '이 이메일로 이미 가입되어 있습니다. 비밀번호를 모르시면 재설정 메일을 보내드릴까요?',
+    tooManyRequests: '잠시 후 다시 시도해주세요. 너무 많은 요청이 발생했습니다.',
   },
 
   // Tabs
@@ -155,6 +177,62 @@ export default {
     startChat: '채팅 시작',
     notFound: '게시글을 찾을 수 없습니다.',
     loadError: '게시글을 불러올 수 없습니다.',
+  },
+
+  // Categories
+  categories: {
+    title: '카테고리',
+    all: '전체',
+    food: '식품',
+    household: '생활용품',
+    electronics: '가전',
+    beauty: '뷰티/건강',
+    baby: '유아용품',
+    pet: '반려동물',
+    other: '기타',
+  },
+
+  // Images
+  images: {
+    addPhoto: '사진 추가',
+    photoLimit: '사진은 최대 3장까지 첨부할 수 있습니다.',
+    uploading: '이미지 업로드 중...',
+  },
+
+  // Notifications
+  notifications: {
+    newMessage: '새 메시지',
+    chatRequest: '새 채팅 요청',
+  },
+
+  // Subscription
+  subscription: {
+    title: '구독 관리',
+    currentPlan: '현재 플랜',
+    freePlan: '무료',
+    premiumPlan: '프리미엄',
+    upgradeButton: '프리미엄 구독하기',
+    price: '월 1,900원',
+    manageSubscription: '구독 관리',
+    restorePurchases: '구매 복원',
+    maybeLater: '나중에',
+    todayUsage: '오늘 사용량',
+    postsUsed: '게시글: {{count}}/{{max}}',
+    chatsUsed: '채팅 시작: {{count}}/{{max}}',
+    features: {
+      noAds: '광고 없음',
+      unlimitedPosts: '무제한 게시글 등록',
+      unlimitedChats: '무제한 채팅 시작',
+    },
+    limits: {
+      postLimitReached: '오늘의 무료 게시글 한도(1개)에 도달했습니다.\n프리미엄으로 업그레이드하면 무제한으로 이용할 수 있습니다.',
+      chatLimitReached: '오늘의 무료 채팅 시작 한도(3회)에 도달했습니다.\n프리미엄으로 업그레이드하면 무제한으로 이용할 수 있습니다.',
+    },
+    purchaseSuccess: '프리미엄 구독이 시작되었습니다!',
+    purchaseError: '구매 처리 중 오류가 발생했습니다.',
+    restoreSuccess: '구매가 복원되었습니다!',
+    restoreNone: '복원할 구매 내역이 없습니다.',
+    restoreError: '구매 복원에 실패했습니다.',
   },
 
   // Errors

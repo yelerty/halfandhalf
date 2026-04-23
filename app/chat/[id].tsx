@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Dimensions, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, setDoc, deleteDoc, getDocs, writeBatch, runTransaction } from 'firebase/firestore';
 import * as Clipboard from 'expo-clipboard';
 import { db, auth } from '../../config/firebase';
 import { FirestoreTimestamp, getErrorMessage } from '../../utils/types';
@@ -21,7 +21,6 @@ export default function ChatScreen() {
   console.log('🔵 ChatScreen component mounted');
   const params = useLocalSearchParams();
   const sessionIdFromParams = Array.isArray(params.id) ? params.id[0] : params.id;
-  const { width: screenWidth } = useWindowDimensions();
   console.log('🔵 sessionIdFromParams:', sessionIdFromParams);
 
   // params에서 게시글 정보 추출 (새 채팅인 경우)
@@ -126,18 +125,37 @@ export default function ChatScreen() {
           }
         } else if (postIdFromParams) {
           console.log('🔴 Chat session does not exist yet, setting sessionExists=false');
-          console.log('🔴 postIdFromParams:', postIdFromParams);
           // 세션이 없지만 params에서 게시글 정보가 있으면 (새 채팅)
+          // Firestore에서 게시글 데이터를 직접 가져와서 검증
           setSessionExists(false);
-          setPostInfo({
-            id: postIdFromParams,
-            store: postStoreFromParams,
-            item: postItemFromParams,
-            userId: postUserIdFromParams,
-            userEmail: postUserEmailFromParams,
-            startTime: postStartTimeFromParams,
-            endTime: postEndTimeFromParams,
-          });
+          try {
+            const postDoc = await getDoc(doc(db, 'posts', postIdFromParams));
+            if (postDoc.exists()) {
+              const postData = postDoc.data();
+              setPostInfo({
+                id: postIdFromParams,
+                store: postData.store,
+                item: postData.items?.[0] || postData.item,
+                userId: postData.userId,
+                userEmail: postData.userEmail,
+                startTime: postData.startTime,
+                endTime: postData.endTime,
+              });
+            } else {
+              Alert.alert(i18n.t('common.error'), i18n.t('chat.postDeleted'),
+                [{ text: i18n.t('common.confirm'), onPress: () => router.back() }]);
+            }
+          } catch {
+            setPostInfo({
+              id: postIdFromParams,
+              store: postStoreFromParams,
+              item: postItemFromParams,
+              userId: postUserIdFromParams,
+              userEmail: postUserEmailFromParams,
+              startTime: postStartTimeFromParams,
+              endTime: postEndTimeFromParams,
+            });
+          }
         } else {
           // 세션도 없고 params도 없으면 에러
           // 사용자의 chatSessions 참조 삭제
@@ -473,61 +491,32 @@ export default function ChatScreen() {
     setMessage(''); // 입력창 즉시 초기화
 
     try {
-      // 세션 존재 여부를 실시간으로 재확인
-      // (양쪽 모두 나가서 삭제된 경우를 대비)
+      // 트랜잭션으로 세션 존재 여부 확인 + 생성을 원자적으로 처리
+      const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
       let actualSessionExists = sessionExists;
-      try {
-        const sessionDocRef = doc(db, 'chatSessions', sessionIdFromParams);
-        const sessionDoc = await getDoc(sessionDocRef);
+
+      await runTransaction(db, async (transaction) => {
+        const sessionDoc = await transaction.get(sessionDocRef);
         actualSessionExists = sessionDoc.exists();
 
-        // 상태 동기화
-        if (actualSessionExists !== sessionExists) {
-          setSessionExists(actualSessionExists);
+        if (!actualSessionExists) {
+          // 세션이 없으면 트랜잭션 안에서 생성
+          transaction.set(sessionDocRef, {
+            postId: postInfo.id,
+            postStore: postInfo.store,
+            postItem: postInfo.item,
+            participants,
+            activeParticipants: participants,
+            createdAt: serverTimestamp(),
+            sessionVersion: serverTimestamp(),
+            lastMessageAt: serverTimestamp(),
+            lastMessage: messageText,
+          });
         }
-      } catch (checkError) {
-        console.log('Error checking session existence:', checkError);
-      }
+      });
 
-      // 세션이 없으면 먼저 생성
       if (!actualSessionExists) {
-        console.log('Creating new chat session:', {
-          sessionIdFromParams,
-          postId: postInfo.id,
-          participants,
-          currentUserId: currentUserId.substring(0, 8),
-          postOwnerId: postInfo.userId.substring(0, 8),
-        });
-
-        // 0. 이전 메시지 삭제 (같은 sessionId의 이전 메시지들 제거)
-        try {
-          const oldMessagesRef = collection(db, 'chatSessions', sessionIdFromParams, 'messages');
-          const oldMessagesSnapshot = await getDocs(oldMessagesRef);
-          for (const oldMsg of oldMessagesSnapshot.docs) {
-            await deleteDoc(oldMsg.ref);
-          }
-          if (oldMessagesSnapshot.docs.length > 0) {
-            console.log('Old messages deleted:', oldMessagesSnapshot.docs.length);
-          }
-        } catch (deleteError) {
-          console.log('Could not delete old messages:', deleteError);
-        }
-
-        // 1. 채팅 세션 생성 (이전 메시지는 자동으로 숨겨짐)
-        await setDoc(doc(db, 'chatSessions', sessionIdFromParams), {
-          postId: postInfo.id,
-          postStore: postInfo.store,
-          postItem: postInfo.item,
-          participants,
-          activeParticipants: participants, // 양쪽 모두 활성 상태로 시작
-          createdAt: serverTimestamp(),
-          sessionVersion: serverTimestamp(), // 세션 버전 추가 - 새 메시지는 이 버전 이후에만 표시
-          lastMessageAt: serverTimestamp(),
-          lastMessage: messageText,
-        });
-        console.log('Chat session created successfully');
-
-        // 2. 내 채팅 세션 참조 생성
+        // 세션 참조는 트랜잭션 밖에서 생성 (subcollection은 트랜잭션 불필요)
         await setDoc(doc(db, 'users', currentUserId, 'chatSessions', sessionIdFromParams), {
           postId: postInfo.id,
           postStore: postInfo.store,
@@ -538,9 +527,6 @@ export default function ChatScreen() {
           joinedAt: serverTimestamp(),
         });
 
-        // 3. 상대방 채팅 세션 참조도 생성 (merge로 안전하게)
-        // 첫 메시지이므로 상대방의 unreadCount는 1
-        console.log('Creating other user session reference for:', postInfo.userId);
         try {
           await setDoc(doc(db, 'users', postInfo.userId, 'chatSessions', sessionIdFromParams), {
             postId: postInfo.id,
@@ -553,7 +539,6 @@ export default function ChatScreen() {
             lastMessage: messageText,
             joinedAt: serverTimestamp(),
           }, { merge: true });
-          console.log('Other user session reference created successfully');
         } catch (refError) {
           console.error('Error creating other user session reference:', refError);
           // Continue anyway - message will still be created
@@ -753,21 +738,17 @@ export default function ChatScreen() {
                 const messagesSnapshot = await getDocs(messagesCollectionRef);
 
                 if (messagesSnapshot.docs.length > 0) {
-                  console.log('Force deleting all messages:', messagesSnapshot.docs.length, 'total');
-                  let deleteCount = 0;
-
-                  // 모든 메시지 hard delete 시도 (권한 에러 무시)
-                  for (const messageDoc of messagesSnapshot.docs) {
+                  const BATCH_SIZE = 500;
+                  for (let i = 0; i < messagesSnapshot.docs.length; i += BATCH_SIZE) {
+                    const msgBatch = writeBatch(db);
+                    const chunk = messagesSnapshot.docs.slice(i, i + BATCH_SIZE);
+                    chunk.forEach((msgDoc) => msgBatch.delete(msgDoc.ref));
                     try {
-                      await deleteDoc(messageDoc.ref);
-                      deleteCount++;
-                    } catch (error: any) {
-                      // 권한 에러는 무시하고 계속 진행
-                      console.log('Could not delete message:', error.code);
+                      await msgBatch.commit();
+                    } catch {
+                      // batch 실패 무시
                     }
                   }
-
-                  console.log('Force deleted', deleteCount, 'messages');
                 }
               } catch (deleteError: any) {
                 console.error('Error in cleanup process:', deleteError.code, deleteError.message);
@@ -817,6 +798,7 @@ export default function ChatScreen() {
           ref={scrollViewRef}
           style={styles.messages}
           contentContainerStyle={styles.messagesContent}
+          removeClippedSubviews={false}
         >
           {postInfo && (
             <View style={styles.postInfo}>
@@ -851,29 +833,22 @@ export default function ChatScreen() {
                       <Text style={styles.dateSeparatorText}>{getDateGroupLabel(msg.createdAt)}</Text>
                     </View>
                   )}
-                  <Pressable
-                    style={[
-                      isSelf ? styles.messageSelfContainer : styles.messageOtherContainer,
-                      Platform.OS === 'ios' ? {
-                        maxWidth: screenWidth * 0.85,
-                        flexShrink: 1,
-                      } : {
-                        width: screenWidth * 0.82,
-                      }
-                    ]}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
                     onLongPress={() => handleCopyMessage(msg.text)}
+                    style={isSelf ? styles.messageSelfContainer : styles.messageOtherContainer}
                   >
-                    <Text
+                    <TextInput
                       style={isSelf ? styles.messageTextSelf : styles.messageText}
-                      numberOfLines={0}
-                      allowFontScaling={false}
-                    >
-                      {msg.text}
-                    </Text>
-                    <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
-                      {formatMessageTime(msg.createdAt)}
-                    </Text>
-                  </Pressable>
+                      value={msg.text}
+                      editable={false}
+                      multiline
+                      scrollEnabled={false}
+                    />
+                  </TouchableOpacity>
+                  <Text style={isSelf ? styles.timestampSelf : styles.timestampOther}>
+                    {formatMessageTime(msg.createdAt)}
+                  </Text>
                 </View>
               );
             })
@@ -933,11 +908,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: Platform.OS === 'android' ? 0 : 8,
     paddingTop: 8,
     paddingBottom: 8,
     flexGrow: 1,
-    width: '100%',
   },
   emptyText: {
     textAlign: 'center',
@@ -947,25 +920,23 @@ const styles = StyleSheet.create({
   },
   messageOtherContainer: {
     backgroundColor: 'white',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    padding: 10,
     borderRadius: 12,
     marginBottom: 4,
-    alignSelf: 'flex-start',
     marginTop: 2,
+    marginHorizontal: 8,
+    alignSelf: 'flex-start',
+    maxWidth: Dimensions.get('window').width * 0.75,
   },
   messageSelfContainer: {
     backgroundColor: '#4CAF50',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    padding: 10,
     borderRadius: 12,
     marginBottom: 4,
-    alignSelf: 'flex-end',
     marginTop: 2,
-  },
-  messageContent: {
-    flexDirection: 'column',
-    maxWidth: '100%',
+    marginHorizontal: 8,
+    alignSelf: 'flex-end',
+    maxWidth: Dimensions.get('window').width * 0.75,
   },
   dateSeparator: {
     alignItems: 'center',
@@ -982,42 +953,41 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 15,
     color: '#333',
-    lineHeight: 18,
-    flexWrap: 'wrap',
-    ...Platform.select({
-      android: {
-        includeFontPadding: false,
-      },
-      ios: {},
-    }),
+    padding: 0,
+    margin: 0,
   },
   messageTextSelf: {
     fontSize: 15,
     color: 'white',
-    lineHeight: 18,
-    flexWrap: 'wrap',
-    ...Platform.select({
-      android: {
-        includeFontPadding: false,
-      },
-      ios: {},
-    }),
+    padding: 0,
+    margin: 0,
   },
   timestampSelf: {
     fontSize: 11,
-    color: '#e0e0e0',
+    color: '#999',
     marginTop: 2,
+    marginBottom: 2,
     textAlign: 'right',
+    marginHorizontal: 12,
   },
   timestampOther: {
     fontSize: 11,
     color: '#999',
     marginTop: 2,
+    marginBottom: 2,
     textAlign: 'left',
+    marginHorizontal: 12,
   },
   safeInputContainer: {
     backgroundColor: 'white',
-    paddingBottom: 20,
+    ...Platform.select({
+      android: {
+        paddingBottom: Dimensions.get('window').height * 0.1,
+      },
+      ios: {
+        paddingBottom: 20,
+      },
+    }),
   },
   inputContainer: {
     flexDirection: 'row',

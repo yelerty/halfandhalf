@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AdBanner from '../../components/AdBanner';
 import { useEffect, useState } from 'react';
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
@@ -183,6 +184,7 @@ export default function ChatsScreen() {
           ))
         )}
       </ScrollView>
+      <AdBanner />
     </View>
   );
 }

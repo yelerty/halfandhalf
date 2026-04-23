@@ -1,9 +1,14 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import * as Crypto from 'expo-crypto';
 import { db, auth } from '../../config/firebase';
+import { POST_CATEGORIES } from '../../constants/categories';
+import { useSubscription } from '../../utils/SubscriptionContext';
+import { canStartChat, incrementChatStartCount } from '../../utils/subscription';
+import UpgradePrompt from '../../components/UpgradePrompt';
 import i18n from '../../i18n';
 
 interface PostDetail {
@@ -12,14 +17,17 @@ interface PostDetail {
   item: string;
   items?: string[];
   date?: string;
-  startTime: string;
-  endTime: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
   userEmail: string;
   userId: string;
   location?: {
     latitude: number;
     longitude: number;
   };
+  category?: string;
+  imageUrls?: string[];
   createdAt: any;
 }
 
@@ -28,6 +36,8 @@ export default function PostDetailScreen() {
   const postId = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
 
+  const { isPremium } = useSubscription();
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [existingSessionId, setExistingSessionId] = useState<string | null>(null);
@@ -72,24 +82,29 @@ export default function PostDetailScreen() {
 
   const checkExistingSession = async (currentUserId: string, postOwnerId: string) => {
     try {
-      const participants = [currentUserId, postOwnerId].sort();
-
-      // 현재 사용자의 chatSessions에서 해당 상대방과의 모든 세션 조회
+      // 1. 현재 사용자의 chatSessions에서 이 게시글과 관련된 세션 조회
       const userSessionsRef = collection(db, 'users', currentUserId, 'chatSessions');
-      const q = query(userSessionsRef, orderBy('lastMessageAt', 'desc'));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(userSessionsRef);
 
-      // 해당 상대방과의 세션만 필터링 (참여자 확인)
-      for (const doc of snapshot.docs) {
-        const sessionData = doc.data();
-        // sessionId에서 참여자 추출하여 확인
-        const sessionId = sessionData.sessionId;
+      for (const docSnap of snapshot.docs) {
+        const sessionData = docSnap.data();
+        if (sessionData.postId === postId) {
+          setExistingSessionId(sessionData.sessionId || docSnap.id);
+          return;
+        }
+      }
 
-        // sessionId 형식: postId_user1_user2 또는 postId_user1_user2_timestamp
-        // 참여자가 일치하는지 확인
-        if (sessionId && sessionId.includes(postOwnerId)) {
-          setExistingSessionId(sessionId);
-          return; // 첫 번째(가장 최근) 세션만 사용
+      // 2. 상대방이 먼저 세션을 만든 경우: 글로벌 chatSessions에서도 확인
+      const globalSessionsRef = collection(db, 'chatSessions');
+      const globalQ = query(globalSessionsRef, where('postId', '==', postId));
+      const globalSnapshot = await getDocs(globalQ);
+
+      for (const docSnap of globalSnapshot.docs) {
+        const sessionData = docSnap.data();
+        const participants: string[] = sessionData.participants || [];
+        if (participants.includes(currentUserId)) {
+          setExistingSessionId(docSnap.id);
+          return;
         }
       }
 
@@ -100,7 +115,7 @@ export default function PostDetailScreen() {
     }
   };
 
-  const handleStartChat = () => {
+  const handleStartChat = async () => {
     if (!post || !auth.currentUser) return;
 
     // 본인 게시글 체크
@@ -109,16 +124,25 @@ export default function PostDetailScreen() {
       return;
     }
 
+    // 새 채팅인 경우에만 제한 체크
+    if (!existingSessionId) {
+      const allowed = await canStartChat(auth.currentUser.uid, isPremium);
+      if (!allowed) {
+        setShowUpgrade(true);
+        return;
+      }
+      await incrementChatStartCount();
+    }
+
     const currentUserId = auth.currentUser.uid;
     const participants = [currentUserId, post.userId].sort();
 
-    // 기존 세션이 있으면 그걸 사용, 없으면 새로운 sessionId 생성 (timestamp 포함)
     let sessionId: string;
     if (existingSessionId) {
       sessionId = existingSessionId;
     } else {
-      const timestamp = Date.now();
-      sessionId = `${post.id}_${participants[0]}_${participants[1]}_${timestamp}`;
+      const randomId = Crypto.randomUUID();
+      sessionId = `${post.id}_${randomId}`;
     }
 
     router.push({
@@ -154,6 +178,11 @@ export default function PostDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: post.store }} />
+      <UpgradePrompt
+        visible={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        message={i18n.t('subscription.limits.chatLimitReached')}
+      />
       <View style={styles.topWrapper}>
         <ScrollView style={styles.container}>
           <View style={styles.header}>
@@ -166,6 +195,31 @@ export default function PostDetailScreen() {
             </View>
           </View>
         </View>
+
+        {post.imageUrls && post.imageUrls.length > 0 && (
+          <View style={styles.imageSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled>
+              {post.imageUrls.map((url, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: url }}
+                  style={styles.detailImage}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {post.category && (
+          <View style={styles.categorySection}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>
+                {i18n.t(`categories.${post.category}`)}
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{i18n.t('postDetail.itemInfo')}</Text>
@@ -206,15 +260,17 @@ export default function PostDetailScreen() {
             </View>
           )}
 
-          <View style={styles.infoRow}>
-            <Ionicons name="time" size={20} color="#666" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>{i18n.t('postDetail.time')}</Text>
-              <Text style={styles.infoValue}>
-                {post.startTime} ~ {post.endTime}
-              </Text>
+          {post.startTime && post.endTime && (
+            <View style={styles.infoRow}>
+              <Ionicons name="time" size={20} color="#666" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>{i18n.t('postDetail.time')}</Text>
+                <Text style={styles.infoValue}>
+                  {post.startTime} ~ {post.endTime}{post.endDate && post.endDate !== post.date ? ` (${post.endDate})` : ''}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
 
         {post.location && (
@@ -284,6 +340,32 @@ const styles = StyleSheet.create({
   userId: {
     fontSize: 12,
     color: '#999',
+  },
+  imageSection: {
+    backgroundColor: 'white',
+    marginTop: 12,
+  },
+  detailImage: {
+    width: Dimensions.get('window').width,
+    height: 250,
+  },
+  categorySection: {
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  categoryBadgeText: {
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '600',
   },
   section: {
     backgroundColor: 'white',

@@ -1,10 +1,11 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../config/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { getErrorMessage } from '../utils/types';
+import { signInWithKakao, signInWithNaver, signInWithInstagram } from '../utils/socialAuth';
 import i18n from '../i18n';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -15,6 +16,8 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   const validateInput = (): boolean => {
     if (!email.trim()) {
@@ -42,40 +45,120 @@ export default function LoginScreen() {
 
   const handleAuth = async () => {
     if (!validateInput()) return;
+    setLoading(true);
 
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-        // 신규 사용자 문서 초기화
-        if (auth.currentUser) {
-          await setDoc(doc(db, 'users', auth.currentUser.uid), {
+        // 회원가입
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 이메일 인증 메일 발송
+        await sendEmailVerification(user);
+
+        // 사용자 문서 초기화
+        await setDoc(doc(db, 'users', user.uid), {
+          email: email,
+          createdAt: new Date().toISOString(),
+          provider: 'email',
+          blacklist: [],
+        }, { merge: true });
+
+        // 이메일 인증 화면으로 이동
+        router.replace('/verify-email');
+      } else {
+        // 로그인
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 이메일 인증 확인
+        if (!user.emailVerified) {
+          try {
+            await sendEmailVerification(user);
+          } catch (verifyError: any) {
+            if (verifyError?.code === 'auth/too-many-requests') {
+              Alert.alert(i18n.t('common.error'), i18n.t('auth.tooManyRequests'));
+            }
+          }
+          router.replace('/verify-email');
+          return;
+        }
+
+        // 기존 사용자 문서 확인 및 생성 (마이그레이션용)
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
+          await setDoc(doc(db, 'users', user.uid), {
             email: email,
-            createdAt: new Date().toISOString(),
+            provider: 'email',
             blacklist: [],
           }, { merge: true });
+        } else if (!userDoc.data()?.email) {
+          await setDoc(doc(db, 'users', user.uid), {
+            email: email,
+          }, { merge: true });
         }
-        Alert.alert(i18n.t('common.success'), i18n.t('auth.registerSuccess'));
+
+        router.replace('/(tabs)');
+      }
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        Alert.alert(
+          i18n.t('auth.emailInUseTitle'),
+          i18n.t('auth.emailInUseMessage'),
+          [
+            { text: i18n.t('common.cancel'), style: 'cancel' },
+            {
+              text: i18n.t('auth.resetPassword'),
+              onPress: () => handlePasswordReset(),
+            },
+          ]
+        );
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        // 기존 사용자 문서 확인 및 생성 (마이그레이션용)
-        if (auth.currentUser) {
-          const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-          if (!userDoc.exists()) {
-            await setDoc(doc(db, 'users', auth.currentUser.uid), {
-              email: email,
-              blacklist: [],
-            }, { merge: true });
-          } else if (!userDoc.data()?.email) {
-            // 기존 데이터에 email 추가
-            await setDoc(doc(db, 'users', auth.currentUser.uid), {
-              email: email,
-            }, { merge: true });
-          }
-        }
+        Alert.alert(i18n.t('common.error'), getErrorMessage(error));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.enterEmailForReset'));
+      return;
+    }
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      Alert.alert(i18n.t('common.error'), i18n.t('auth.invalidEmail'));
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      Alert.alert(i18n.t('common.success'), i18n.t('auth.resetEmailSent'));
+    } catch (error) {
+      Alert.alert(i18n.t('common.error'), getErrorMessage(error));
+    }
+  };
+
+  const handleSocialLogin = async (provider: 'kakao' | 'naver' | 'instagram') => {
+    setSocialLoading(provider);
+    try {
+      switch (provider) {
+        case 'kakao':
+          await signInWithKakao();
+          break;
+        case 'naver':
+          await signInWithNaver();
+          break;
+        case 'instagram':
+          await signInWithInstagram();
+          break;
       }
       router.replace('/(tabs)');
     } catch (error) {
       Alert.alert(i18n.t('common.error'), getErrorMessage(error));
+    } finally {
+      setSocialLoading(null);
     }
   };
 
@@ -94,10 +177,67 @@ export default function LoginScreen() {
           <Text style={styles.title}>{i18n.t('app.name')}</Text>
           <Text style={styles.subtitle}>{i18n.t('app.subtitle')}</Text>
 
+          {/* 소셜 로그인 버튼 */}
+          <View style={styles.socialSection}>
+            <TouchableOpacity
+              style={[styles.socialButton, styles.kakaoButton]}
+              onPress={() => handleSocialLogin('kakao')}
+              disabled={!!socialLoading}
+            >
+              {socialLoading === 'kakao' ? (
+                <ActivityIndicator color="#3C1E1E" />
+              ) : (
+                <>
+                  <Text style={styles.kakaoIcon}>K</Text>
+                  <Text style={styles.kakaoText}>{i18n.t('auth.kakaoLogin')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.socialButton, styles.naverButton]}
+              onPress={() => handleSocialLogin('naver')}
+              disabled={!!socialLoading}
+            >
+              {socialLoading === 'naver' ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.naverIcon}>N</Text>
+                  <Text style={styles.naverText}>{i18n.t('auth.naverLogin')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.socialButton, styles.instagramButton]}
+              onPress={() => handleSocialLogin('instagram')}
+              disabled={!!socialLoading}
+            >
+              {socialLoading === 'instagram' ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.instagramIcon}>IG</Text>
+                  <Text style={styles.instagramText}>{i18n.t('auth.instagramLogin')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* 구분선 */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>{i18n.t('auth.orDivider')}</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* 이메일/비밀번호 폼 */}
           <View style={styles.form}>
             <TextInput
               style={styles.input}
-              placeholder={i18n.t('auth.email')}
+              placeholder={i18n.t('auth.emailPlaceholder')}
+              placeholderTextColor="#aaa"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -105,17 +245,38 @@ export default function LoginScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder={i18n.t('auth.password')}
+              placeholder={i18n.t('auth.passwordPlaceholder')}
+              placeholderTextColor="#aaa"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
             />
 
-            <TouchableOpacity style={styles.button} onPress={handleAuth}>
-              <Text style={styles.buttonText}>
-                {isSignUp ? i18n.t('auth.registerButton') : i18n.t('auth.loginButton')}
-              </Text>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.disabledButton]}
+              onPress={handleAuth}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>
+                  {isSignUp ? i18n.t('auth.registerButton') : i18n.t('auth.loginButton')}
+                </Text>
+              )}
             </TouchableOpacity>
+
+            {isSignUp && (
+              <Text style={styles.verificationHint}>
+                {i18n.t('auth.verificationHint')}
+              </Text>
+            )}
+
+            {!isSignUp && (
+              <TouchableOpacity onPress={handlePasswordReset}>
+                <Text style={styles.forgotText}>{i18n.t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
               <Text style={styles.switchText}>
@@ -154,10 +315,79 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     color: '#666',
-    marginBottom: 40,
+    marginBottom: 32,
   },
+  // 소셜 로그인
+  socialSection: {
+    gap: 10,
+    marginBottom: 24,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    padding: 14,
+    gap: 8,
+  },
+  kakaoButton: {
+    backgroundColor: '#FEE500',
+  },
+  kakaoIcon: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#3C1E1E',
+  },
+  kakaoText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3C1E1E',
+  },
+  naverButton: {
+    backgroundColor: '#03C75A',
+  },
+  naverIcon: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  naverText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  instagramButton: {
+    backgroundColor: '#E1306C',
+  },
+  instagramIcon: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  instagramText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // 구분선
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ddd',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#999',
+    fontSize: 13,
+  },
+  // 폼
   form: {
-    gap: 16,
+    gap: 14,
   },
   input: {
     borderWidth: 1,
@@ -172,14 +402,27 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
+  disabledButton: {
+    backgroundColor: '#aaa',
+  },
   buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
+  verificationHint: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+  },
+  forgotText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 13,
+  },
   switchText: {
     textAlign: 'center',
     color: '#4CAF50',
-    marginTop: 8,
+    marginTop: 4,
   },
 });

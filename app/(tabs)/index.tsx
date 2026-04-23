@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Alert, RefreshControl, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AdBanner from '../../components/AdBanner';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc, getDoc, getDocs, setDoc, serverTimestamp, limit, startAfter } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
@@ -11,6 +12,7 @@ import { deleteChatSessionsForPost } from '../../utils/chatUtils';
 import { isPostExpired } from '../../utils/dateUtils';
 import { createDebouncedCallback } from '../../utils/debounce';
 import { FirestoreTimestamp } from '../../utils/types';
+import { POST_CATEGORIES, CategoryId } from '../../constants/categories';
 import i18n from '../../i18n';
 
 interface Post {
@@ -19,14 +21,17 @@ interface Post {
   item: string;
   items?: string[];
   date?: string;
-  startTime: string;
-  endTime: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
   userEmail: string;
   userId: string;
   location?: {
     latitude: number;
     longitude: number;
   };
+  category?: string;
+  imageUrls?: string[];
   createdAt: FirestoreTimestamp;
 }
 
@@ -45,6 +50,7 @@ export default function HomeScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryId | null>(null);
   const debouncedSetFilter = useRef(createDebouncedCallback((value: string) => setDebouncedFilter(value), 300)).current;
 
   const blacklistSet = useMemo(() => new Set(blacklist), [blacklist]);
@@ -246,11 +252,16 @@ export default function HomeScreen() {
       );
     }
 
+    // 카테고리 필터
+    if (categoryFilter) {
+      filtered = filtered.filter(post => post.category === categoryFilter);
+    }
+
     // 블랙리스트 필터
     filtered = filtered.filter(post => !blacklistSet.has(post.userId));
 
     setFilteredPosts(filtered);
-  }, [posts, debouncedFilter, blacklistSet, userLocation]);
+  }, [posts, debouncedFilter, blacklistSet, userLocation, categoryFilter]);
 
   const handleAddToBlacklist = async (userId: string, userEmail: string) => {
     if (!auth.currentUser) {
@@ -307,6 +318,30 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilterScroll}>
+          <View style={styles.categoryFilterRow}>
+            <TouchableOpacity
+              style={[styles.categoryFilterChip, !categoryFilter && styles.categoryFilterChipActive]}
+              onPress={() => setCategoryFilter(null)}
+            >
+              <Text style={[styles.categoryFilterText, !categoryFilter && styles.categoryFilterTextActive]}>
+                {i18n.t('categories.all')}
+              </Text>
+            </TouchableOpacity>
+            {POST_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[styles.categoryFilterChip, categoryFilter === cat.id && styles.categoryFilterChipActive]}
+                onPress={() => setCategoryFilter(categoryFilter === cat.id ? null : cat.id)}
+              >
+                <Text style={[styles.categoryFilterText, categoryFilter === cat.id && styles.categoryFilterTextActive]}>
+                  {i18n.t(cat.labelKey)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -333,6 +368,9 @@ export default function HomeScreen() {
               style={styles.postCard}
               onPress={() => handleViewDetail(post)}
             >
+              {post.imageUrls && post.imageUrls.length > 0 && (
+                <Image source={{ uri: post.imageUrls[0] }} style={styles.cardImage} />
+              )}
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{post.store}</Text>
                 <TouchableOpacity
@@ -345,12 +383,21 @@ export default function HomeScreen() {
                   <Ionicons name="ban" size={20} color="#ff5252" />
                 </TouchableOpacity>
               </View>
+              {post.category && (
+                <View style={styles.cardCategoryBadge}>
+                  <Text style={styles.cardCategoryText}>
+                    {i18n.t(`categories.${post.category}`)}
+                  </Text>
+                </View>
+              )}
               {post.date && (
                 <Text style={styles.cardDate}>{post.date}</Text>
               )}
-              <Text style={styles.cardTime}>
-                {post.startTime} - {post.endTime}
-              </Text>
+              {post.startTime && post.endTime && (
+                <Text style={styles.cardTime}>
+                  {post.startTime} - {post.endTime}{post.endDate && post.endDate !== post.date ? ` (${post.endDate})` : ''}
+                </Text>
+              )}
               <Text style={styles.cardItem}>{post.items?.join(', ') || post.item}</Text>
               <Text style={styles.cardUser}>{post.userEmail}</Text>
               <View style={styles.chatIndicator}>
@@ -381,6 +428,7 @@ export default function HomeScreen() {
       >
         <Ionicons name="add" size={32} color="white" />
       </TouchableOpacity>
+      <AdBanner />
     </View>
   );
 }
@@ -423,6 +471,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  categoryFilterScroll: {
+    marginTop: 10,
+  },
+  categoryFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  categoryFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  categoryFilterChipActive: {
+    backgroundColor: 'white',
+  },
+  categoryFilterText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  categoryFilterTextActive: {
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
   content: {
     flex: 1,
     padding: 16,
@@ -448,6 +521,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  cardImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  cardCategoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  cardCategoryText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '500',
   },
   cardTitle: {
     fontSize: 18,

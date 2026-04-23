@@ -34,6 +34,28 @@ export default {
     fillAllFields: 'Please fill in all fields',
     loginSuccess: 'Login successful!',
     registerSuccess: 'Sign up successful!',
+    // Social login
+    kakaoLogin: 'Continue with Kakao',
+    naverLogin: 'Continue with Naver',
+    instagramLogin: 'Continue with Instagram',
+    orDivider: 'or',
+    // Email verification
+    verificationHint: 'Email verification is required after sign up.',
+    verifyEmailTitle: 'Verify Your Email',
+    verifyEmailDesc: 'We sent a verification link to the email below.\nPlease check your email and click the link.',
+    resendVerification: 'Resend Verification Email',
+    verificationSent: 'Verification email sent.',
+    verificationSendError: 'Failed to send verification email. Please try again later.',
+    backToLogin: 'Back to Login',
+    // Password reset
+    forgotPassword: 'Forgot your password?',
+    resetPassword: 'Reset Password',
+    enterEmailForReset: 'Please enter your email first to reset your password.',
+    invalidEmail: 'Please enter a valid email address.',
+    resetEmailSent: 'Password reset email sent. Please check your inbox.',
+    emailInUseTitle: 'Email Already Registered',
+    emailInUseMessage: 'This email is already registered. Would you like to receive a password reset email?',
+    tooManyRequests: 'Please try again later. Too many requests.',
   },
 
   // Tabs
@@ -155,6 +177,62 @@ export default {
     startChat: 'Start Chat',
     notFound: 'Post not found.',
     loadError: 'Failed to load post.',
+  },
+
+  // Categories
+  categories: {
+    title: 'Category',
+    all: 'All',
+    food: 'Food',
+    household: 'Household',
+    electronics: 'Electronics',
+    beauty: 'Beauty/Health',
+    baby: 'Baby',
+    pet: 'Pets',
+    other: 'Other',
+  },
+
+  // Images
+  images: {
+    addPhoto: 'Add Photo',
+    photoLimit: 'You can attach up to 3 photos.',
+    uploading: 'Uploading images...',
+  },
+
+  // Notifications
+  notifications: {
+    newMessage: 'New message',
+    chatRequest: 'New chat request',
+  },
+
+  // Subscription
+  subscription: {
+    title: 'Subscription',
+    currentPlan: 'Current Plan',
+    freePlan: 'Free',
+    premiumPlan: 'Premium',
+    upgradeButton: 'Upgrade to Premium',
+    price: '1,900 KRW/month',
+    manageSubscription: 'Manage Subscription',
+    restorePurchases: 'Restore Purchases',
+    maybeLater: 'Maybe Later',
+    todayUsage: "Today's Usage",
+    postsUsed: 'Posts: {{count}}/{{max}}',
+    chatsUsed: 'Chat starts: {{count}}/{{max}}',
+    features: {
+      noAds: 'No ads',
+      unlimitedPosts: 'Unlimited posts',
+      unlimitedChats: 'Unlimited chat starts',
+    },
+    limits: {
+      postLimitReached: "You've reached today's free post limit (1).\nUpgrade to Premium for unlimited access.",
+      chatLimitReached: "You've reached today's free chat start limit (3).\nUpgrade to Premium for unlimited access.",
+    },
+    purchaseSuccess: 'Premium subscription activated!',
+    purchaseError: 'An error occurred during purchase.',
+    restoreSuccess: 'Purchases restored!',
+    restoreNone: 'No purchases to restore.',
+    restoreError: 'Failed to restore purchases.',
   },
 
   // Errors

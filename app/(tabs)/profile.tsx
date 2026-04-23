@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import { useSubscription } from '../../utils/SubscriptionContext';
+import AdBanner from '../../components/AdBanner';
 import i18n from '../../i18n';
 
 interface BlacklistedUser {
@@ -14,6 +16,7 @@ interface BlacklistedUser {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { isPremium } = useSubscription();
   const [blacklistedUsers, setBlacklistedUsers] = useState<BlacklistedUser[]>([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -144,9 +147,26 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
+      <TouchableOpacity
+        style={styles.subscriptionButton}
+        onPress={() => router.push('/subscription')}
+      >
+        <View style={styles.subscriptionRow}>
+          <Ionicons name="diamond-outline" size={20} color="#4CAF50" />
+          <Text style={styles.subscriptionText}>{i18n.t('subscription.title')}</Text>
+          <View style={[styles.planBadge, isPremium ? styles.premiumBadge : styles.freeBadge]}>
+            <Text style={[styles.planBadgeText, isPremium ? styles.premiumText : styles.freeText]}>
+              {isPremium ? i18n.t('subscription.premiumPlan') : i18n.t('subscription.freePlan')}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#ccc" />
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>{i18n.t('auth.logout')}</Text>
       </TouchableOpacity>
+      <AdBanner />
     </View>
   );
 }
@@ -215,6 +235,47 @@ const styles = StyleSheet.create({
   blacklistText: {
     fontSize: 14,
     color: '#333',
+  },
+  subscriptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+  },
+  subscriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  subscriptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  planBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  freeBadge: {
+    backgroundColor: '#f0f0f0',
+  },
+  premiumBadge: {
+    backgroundColor: '#E8F5E9',
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  freeText: {
+    color: '#999',
+  },
+  premiumText: {
+    color: '#4CAF50',
   },
   logoutButton: {
     backgroundColor: '#ff5252',
